@@ -20,8 +20,18 @@ def ps_config(value):
     data = base64.b64encode(json.dumps(value).encode()).decode()
     return "$cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+data+"')) | ConvertFrom-Json; "
 
-def atomic_json(path, value):
+def atomic_json(path, value, private=False):
     temp = path.with_suffix('.tmp')
+    if private:
+        # Set a private ACL before writing credentials, including on an existing temp file.
+        temp.touch(exist_ok=True)
+        powershell(ps_config({'path':str(temp.resolve())})+r'''
+        $acl=[Security.AccessControl.FileSecurity]::new()
+        $acl.SetAccessRuleProtection($true,$false)
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User,'FullControl','Allow'))
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-5-18'),'FullControl','Allow'))
+        [IO.File]::SetAccessControl($cfg.path,$acl)
+        ''')
     temp.write_text(json.dumps(value),encoding='utf-8')
     temp.replace(path)
 

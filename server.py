@@ -14,10 +14,10 @@ from app_limits import Limits
 from remote_terminal import Terminal
 from fps_monitor import FpsMonitor
 from telemetry import Metrics
-from gpu_load import GpuLoad
 from power_controls import PowerActions
 from device_controls import Devices
 from network_limit import NetworkLimit
+from laptop_controls import Laptops
 TOKEN_FILE = DATA / 'key.txt'
 if not TOKEN_FILE.exists(): TOKEN_FILE.write_text(secrets.token_urlsafe(24))
 TOKEN = TOKEN_FILE.read_text().strip()
@@ -264,10 +264,10 @@ def set_power(value=None, restore=False):
 
 fps = FpsMonitor(ROOT, DATA)
 metrics = Metrics(fps, stop, smi)
-gpu_load = GpuLoad(ROOT, DATA)
 power_actions = PowerActions()
 devices = Devices(DATA)
 network_limit = NetworkLimit(ROOT, DATA)
+laptops = Laptops(DATA,socket.gethostname())
 cap_cache = {'gpu':{'name':'GPU','available':False,'reason':'Checking GPU driver support…','canRestore':GPU_BACKUP.exists()},
              'gpuClocks':{'available':False,'reason':'Checking GPU driver support…'}}
 cap_refresh = threading.Event()
@@ -282,7 +282,6 @@ def supervise():
     while not stop.wait(.25):
         try:
             power_actions.tick()
-            gpu_load.tick(metrics.status()['gpus'])
             network_limit.tick()
         except Exception as exc: print('Control supervisor:',exc)
 
@@ -330,11 +329,17 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if not self.authorized(): return self.respond({'error':'Enter the access key shown on the laptop.'},401)
-        if self.path == '/api/metrics': return self.respond({**metrics.status(),'gpuLoad':gpu_load.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status()})
+        if self.path == '/api/laptops': return self.respond(laptops.status())
+        target=self.headers.get('X-HomeControl-Device','local')
+        if target!='local':
+            try:
+                code,result=laptops.relay(target,self.path)
+                return self.respond(result,502 if code==401 else code)
+            except Exception as exc:return self.respond({'error':str(exc)},502)
+        if self.path == '/api/metrics': return self.respond({**metrics.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status()})
         if self.path == '/api/network': return self.respond(network_limit.status())
         if self.path == '/api/fps': return self.respond(fps.status())
         if self.path == '/api/devices': return self.respond(devices.status())
-        if self.path == '/api/gpu/load': return self.respond(gpu_load.status())
         if self.path == '/api/power/action': return self.respond(power_actions.status())
         if self.path == '/api/gpu/diagnostics': return self.respond(gpu_diagnostics())
         if self.path != '/api/status': return self.respond({'error':'Not found'},404)
@@ -355,6 +360,12 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 16384: raise ValueError('Invalid request size')
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict): raise ValueError('JSON object required')
+            if self.path == '/api/laptops':return self.respond(laptops.add(body.get('name'),body.get('url'),body.get('key')))
+            if self.path == '/api/laptops/remove':return self.respond(laptops.remove(body.get('id')))
+            target=self.headers.get('X-HomeControl-Device','local')
+            if target!='local':
+                code,result=laptops.relay(target,self.path,body)
+                return self.respond(result,502 if code==401 else code)
             if self.path == '/api/power':
                 value = body.get('value')
                 if type(value) is not int or not 1 <= value <= 100: raise ValueError('Choose 1–100%')
@@ -364,18 +375,12 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == '/api/gpu': set_gpu(body.get('value'), mode=body.get('mode','power'))
             elif self.path == '/api/gpu/restore': set_gpu(restore=True)
             elif self.path == '/api/fps/settings': return self.respond(fps.settings(body.get('enabled'),body.get('pid')))
-            elif self.path == '/api/gpu/load/start':
-                selected=next((g for g in metrics.status()['gpus'] if g['id']==body.get('adapter')),None)
-                if selected and selected.get('temperatureC') is not None and selected['temperatureC']>=85: raise RuntimeError('Selected GPU is at or above 85°C')
-                return self.respond(gpu_load.start(body.get('adapter'),body.get('duty',25),body.get('minutes',1)))
-            elif self.path == '/api/gpu/load/duty': return self.respond(gpu_load.update(body.get('duty')))
-            elif self.path == '/api/gpu/load/stop': return self.respond(gpu_load.stop())
             elif self.path == '/api/network':
                 if 'mbps' not in body:raise ValueError('Mbps is required; use null for Unlimited.')
                 return self.respond(network_limit.apply(body['mbps']))
             elif self.path == '/api/devices/refresh': devices.refresh(); return self.respond(devices.status())
             elif self.path == '/api/devices/selections': return self.respond(devices.select(body.get('selections')))
-            elif self.path == '/api/devices/action': return self.respond(devices.perform(body.get('group'),body.get('action')))
+            elif self.path == '/api/devices/action': return self.respond(devices.perform(body.get('group'),body.get('action'),body.get('confirmed',False)))
             elif self.path == '/api/power/action': return self.respond(power_actions.request(body.get('action')))
             elif self.path == '/api/power/cancel': return self.respond(power_actions.cancel())
             elif self.path == '/api/limits': limits.save(body.get('app'),body.get('minutes'),body.get('percent'),body.get('scope','app')); limits.tick()
@@ -426,5 +431,5 @@ if __name__ == '__main__':
         try: server.serve_forever()
         except KeyboardInterrupt: stop.set()
         finally:
-            stop.set(); power_actions.cancel(); gpu_load.stop('HomeControl closed'); network_limit.stop(); fps.close()
+            stop.set(); power_actions.cancel(); network_limit.stop(); fps.close()
             limits.close(); server.server_close()

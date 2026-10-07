@@ -14,7 +14,15 @@ import time
 from win_support import atomic_json, powershell, ps_config, HIDDEN, GUID
 
 INSTANCE = re.compile(r'[A-Za-z0-9\\&_.{}#:+\-]{1,512}\Z')
-PROTECTED_CLASSES = {'net','diskdrive','volume','scsiadapter','storage','hdc','system'}
+STORAGE_CLASSES = {'diskdrive','volume','scsiadapter','storage','hdc'}
+
+def network_connections():
+    """A missing/failed reading never grants permission to stop a network ancestor."""
+    try:
+        items=json.loads(powershell("@(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Select-Object PnPDeviceID,Status) | ConvertTo-Json -Compress"))
+        if isinstance(items,dict): items=[items]
+        return {r['PnPDeviceID'].upper():str(r.get('Status')) not in ('Disconnected','Disabled','Not Present','LowerLayerDown') for r in items or [] if r.get('PnPDeviceID')}
+    except Exception: return {}
 
 def raw_inventory():
     # Native enumeration avoids invoking a slow CIM query for every device.
@@ -52,14 +60,18 @@ def raw_inventory():
     finally: setup.SetupDiDestroyDeviceInfoList(handle)
     return rows
 
-def safe_inventory(rows):
+def safe_inventory(rows,connections=None):
     by_id = {r['id'].upper():r for r in rows}
     protected = {}
     for row in rows:
         kind = (row.get('class') or '').lower(); service = (row.get('service') or '').lower()
         name = (row.get('name') or '').lower()
-        if kind in PROTECTED_CLASSES or service.startswith(('usbhub','usbxhci','usbehci','usbohci','usbuhci')) or 'usb root hub' in name or 'host controller' in name:
-            reason='Network device' if kind=='net' else 'Storage device' if kind in {'diskdrive','volume','scsiadapter','storage','hdc'} else 'USB hub or controller' if service.startswith(('usbhub','usbxhci','usbehci','usbohci','usbuhci')) or 'usb root hub' in name or 'host controller' in name else 'System device'
+        # A disconnected Bluetooth PAN is optional. Other network adapters remain protected.
+        optional_pan=kind=='net' and service=='bthpan' and (connections or {}).get(row['id'].upper()) is False
+        controller=service.startswith(('usbxhci','usbehci','usbohci','usbuhci')) or 'host controller' in name
+        system=kind=='system' and not row['id'].upper().startswith('BTH')
+        if kind in STORAGE_CLASSES or kind=='net' and not optional_pan or controller or system:
+            reason='Active or unverified Bluetooth network' if service=='bthpan' else 'Network device' if kind=='net' else 'Storage device' if kind in STORAGE_CLASSES else 'USB host controller' if controller else 'System device'
             current = row['id'].upper(); visited=set()
             while current and current not in visited:
                 visited.add(current)
@@ -78,11 +90,16 @@ def safe_inventory(rows):
         # Only USB descendants and keyboard devices appear. Protected entries remain visible with a reason.
         if not usb and not keyboard: continue
         excluded=uid.upper() in protected or not INSTANCE.fullmatch(uid)
+        service=(row.get('service') or '').lower()
+        hub=service.startswith('usbhub') or 'usb root hub' in (row.get('name') or '').lower()
+        radio=service=='bthusb'
+        warning='Controls the whole USB hub and its connected devices, including inputs and Bluetooth.' if hub else 'Controls Bluetooth accessories, including wireless mice, controllers and audio.' if radio else ''
         result.append({'id':uid,'name':row.get('name') or uid,'class':row.get('class'),
                        'groups':(['usb'] if usb else [])+(['keyboard'] if keyboard else []),
                        'enabled':None if row.get('problem') is None else row.get('problem')!=22,
                        'problemCode':row.get('problem'),'protected':bool(excluded),
-                       'reason':('Protected · '+protected.get(uid.upper(),'Invalid device instance ID')) if excluded else ''})
+                       'reason':('Protected · '+protected.get(uid.upper(),'Invalid device instance ID')) if excluded else '',
+                       'warning':warning,'requiresConfirmation':bool(warning),'parent':row.get('parent','')})
     return result
 
 def pnp_action(action,uid):
@@ -90,7 +107,8 @@ def pnp_action(action,uid):
         raise ValueError('Invalid device action or instance ID')
     # Pass the ID as a subprocess argument; never build a shell command with it.
     result=subprocess.run(['pnputil.exe','/'+action+'-device',uid],capture_output=True,timeout=25,creationflags=HIDDEN)
-    output=(result.stdout+result.stderr).decode(errors='replace').strip()
+    raw=result.stdout+result.stderr
+    output=raw.decode('utf-16' if raw.startswith((b'\xff\xfe',b'\xfe\xff')) else 'utf-16-le' if b'\x00' in raw else 'utf-8',errors='replace').strip()
     if result.returncode: raise RuntimeError(output or 'Windows rejected the device action (code '+str(result.returncode)+')')
     return output[:1500]
 
@@ -143,6 +161,12 @@ class Journal:
             records=self.read()
             due=[(uid,r) for uid,r in records.items() if r['deadline']<=self.clock()]
             if not due: return results
+            def depth(item):
+                uid=item[0]; seen=set()
+                while uid in records and uid not in seen:
+                    seen.add(uid); uid=records[uid].get('parent','')
+                return len(seen)
+            due.sort(key=depth)
             # Recovery is enable-only, and records only exist for previously enabled devices.
             for uid,record in due:
                 if not INSTANCE.fullmatch(uid) or record.get('wasEnabled') is not True:
@@ -166,13 +190,13 @@ class Journal:
         return results
 
 class Devices:
-    def __init__(self,data,inventory=raw_inventory,action=pnp_action,register=register_recovery,clock=time.time):
-        self.data=data; self.inventory=inventory; self.action=action; self.register=register; self.clock=clock
+    def __init__(self,data,inventory=raw_inventory,action=pnp_action,register=register_recovery,clock=time.time,connections=network_connections):
+        self.data=data; self.inventory=inventory; self.action=action; self.register=register; self.clock=clock; self.connections=connections
         self.journal=Journal(data,clock); self.file=data/'device-selections.json'; self.lock=threading.RLock()
         self.selections=json.loads(self.file.read_text()) if self.file.exists() else {'usb':[],'keyboard':[]}
         self.cached=[]; self.error=''; self.sampledAt=None
     def refresh(self):
-        rows=safe_inventory(self.inventory())
+        rows=safe_inventory(self.inventory(),self.connections())
         with self.lock: self.cached=rows; self.sampledAt=self.clock(); self.error=''
         return rows
     def status(self):
@@ -192,16 +216,28 @@ class Devices:
                     if not d or d['protected'] or group not in d['groups']: raise ValueError('Selection includes an unavailable or protected device')
             atomic_json(self.file,chosen); self.selections=chosen
         return self.status()
-    def perform(self,group,action):
+    def perform(self,group,action,confirmed=False):
         if group not in ('usb','keyboard','both') or action not in ('enable','disable','restart'): raise ValueError('Invalid device group or action')
         with self.lock:
             chosen=list(dict.fromkeys(uid for g in (('usb','keyboard') if group=='both' else (group,)) for uid in self.selections[g]))
             if not chosen: raise ValueError('Select and save devices first')
             inventory={d['id']:d for d in self.refresh()}
+            if action in ('disable','restart') and confirmed is not True and any(inventory.get(uid,{}).get('requiresConfirmation') for uid in chosen):
+                raise ValueError('Confirm the USB hub or Bluetooth action before continuing')
+            # Disable children first; enable/restart parents first. This keeps child recovery intents valid.
+            def depth(uid):
+                seen=set()
+                while uid in inventory and uid not in seen:
+                    seen.add(uid); uid=inventory[uid]['parent']
+                return len(seen)
+            chosen.sort(key=depth,reverse=action=='disable')
             results=[]
             with self.journal.locked():
                 records=self.journal.read()
                 for uid in chosen:
+                    # Connections and attachments can change since selections were saved or the last action.
+                    if action in ('disable','restart'):
+                        inventory={d['id']:d for d in self.refresh()}
                     d=inventory.get(uid)
                     if not d or d['protected'] or not INSTANCE.fullmatch(uid):
                         results.append({'id':uid,'ok':False,'error':'Unavailable or protected device'}); continue
@@ -211,18 +247,19 @@ class Devices:
                         results.append({'id':uid,'ok':True,'message':'Already disabled; no recovery change'}); continue
                     if action=='restart' and not d['enabled']:
                         results.append({'id':uid,'ok':False,'error':'Enable the device before restarting it'}); continue
-                    if action=='disable' and uid in records:
+                    needs_recovery=action=='disable' or action=='restart' and d['requiresConfirmation']
+                    if needs_recovery and uid in records:
                         results.append({'id':uid,'ok':False,'error':'Automatic recovery already pending'}); continue
                     try:
-                        if action=='disable':
+                        if needs_recovery:
                             # Durable intent and an independently verified task must both precede disable.
-                            records[uid]={'wasEnabled':True,'deadline':self.clock()+60,'name':d['name']}
+                            records[uid]={'wasEnabled':True,'deadline':self.clock()+60,'name':d['name'],'parent':d['parent']}
                             self.journal.write(records)
                             try: self.register(self.data,min(r['deadline'] for r in records.values()))
                             except Exception:
                                 del records[uid]; self.journal.write(records); raise
                         output=self.action(action,uid)
-                        if action in ('enable','disable'):
+                        if action in ('enable','disable','restart'):
                             expected=22 if action=='disable' else None
                             for attempt in range(5):
                                 state=next((r for r in self.inventory() if r['id'].upper()==uid.upper()),None)
@@ -235,7 +272,7 @@ class Devices:
                             state=next((r for r in self.inventory() if r['id']==uid),None)
                             if state and state.get('problem') not in (None,22): del records[uid]; self.journal.write(records)
                         results.append({'id':uid,'name':d['name'],'ok':True,'message':output,
-                                        'recoverySeconds':60 if action=='disable' else None})
+                                        'recoverySeconds':60 if needs_recovery else None})
                     except Exception as exc:
                         # A partially successful disable still has its pre-armed recovery record.
                         results.append({'id':uid,'name':d['name'],'ok':False,'error':str(exc)})

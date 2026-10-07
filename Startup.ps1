@@ -8,6 +8,7 @@ if ($Remove) {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
     }
     Get-NetFirewallRule -Name 'HomeControl-Private-8765' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    Get-NetFirewallRule -Name 'HomeControl-Tailscale-8765' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     Write-Host 'Startup disabled. Usage and saved original settings are preserved.'
     Write-Host 'Pending device recovery tasks are preserved. Keep this folder in place until recovery finishes.'
     exit
@@ -45,6 +46,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'HomeControl phone dashboard and app tracking.' -Force | Out-Null
 Get-NetFirewallRule -Name 'HomeControl-Private-8765' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -Name 'HomeControl-Private-8765' -DisplayName 'HomeControl (home network)' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765 -Program $windowless -Profile Private -RemoteAddress LocalSubnet | Out-Null
+Get-NetFirewallRule -Name 'HomeControl-Tailscale-8765' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 Start-ScheduledTask -TaskName $taskName
 Write-Host 'Installed. Runs quietly now and at sign-in. Keep this folder in place.'
 Write-Host 'Run Connection-Info.cmd for the phone address and key.'

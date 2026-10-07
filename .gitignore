@@ -28,4 +28,9 @@ device-recovery.tmp
 dist/
 network-limit-*.json
 network-limit-*.tmp
+ngrok*.yml
+ngrok*.yaml
+online-settings.*
+laptops.json
+laptops.tmp
 !vendor/windivert/WinDivert-2.2.2-source.zip

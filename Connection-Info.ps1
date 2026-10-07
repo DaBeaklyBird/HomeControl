@@ -20,4 +20,5 @@ try {
         Write-Host ('Automatic sign-in link: http://' + $address.IPAddress + ':8765/#key=' + [uri]::EscapeDataString($key))
     }
     Write-Host 'Keep automatic sign-in links private: they contain your access key.'
+    Write-Host 'Home Wi-Fi only. Add another laptop using its address and key in the Laptops card.'
 } catch { Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
