@@ -29,7 +29,7 @@ def register_recovery(data,deadline):
     $logon=New-ScheduledTaskTrigger -AtLogOn -User $account
     $principal=New-ScheduledTaskPrincipal -UserId $account -LogonType Interactive -RunLevel Highest
     $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
-    Register-ScheduledTask -TaskName $cfg.name -Action $action -Trigger @($once,$logon) -Principal $principal -Settings $settings -Description 'Restore temporary HomeControl Tweakout CPU settings after expiry or sign-in.' -Force | Out-Null
+    Register-ScheduledTask -TaskName $cfg.name -Action $action -Trigger @($once,$logon) -Principal $principal -Settings $settings -Description 'Restore temporary HomeControl CPU settings after expiry or sign-in.' -Force | Out-Null
     $verify=Get-ScheduledTask -TaskName $cfg.name
     if($verify.Principal.RunLevel -ne 'Highest' -or $verify.State -eq 'Disabled'){throw 'CPU recovery task was not armed'}
     ''',timeout=8)
@@ -45,16 +45,26 @@ class CpuRecovery:
     def __init__(self,data,read=cpu_state,command=power_command,register=register_recovery,clock=time.time):
         self.data=Path(data);self.file=self.data/'tweakout-cpu.json';self.read=read;self.command=command;self.register=register;self.clock=clock
         self.mutex=Journal(self.data);self.mutex.name='Global\\'+task_name(self.data)
-    def apply(self):
+    def arm(self,seconds=60):
         with self.mutex.locked():
-            if self.file.exists():raise RuntimeError('Temporary CPU recovery is pending. Cancel Tweakout to retry recovery.')
+            if self.file.exists():raise RuntimeError('Temporary CPU recovery is pending. Cancel the mode to retry recovery.')
             scheme,values=self.read()
-            saved={'scheme':scheme,'values':values,'deadline':self.clock()+60}
+            saved={'scheme':scheme,'values':values,'deadline':self.clock()+seconds}
             atomic_json(self.file,saved)
             # Durable record and a verified independent task precede the first CPU write.
             self.register(self.data,saved['deadline'])
-            for flag in ('/setacvalueindex','/setdcvalueindex'):self.command(flag,scheme,'SUB_PROCESSOR','PROCTHROTTLEMAX','1')
+            return saved
+    def set_values(self,values):
+        with self.mutex.locked():
+            if not self.file.exists():raise RuntimeError('CPU recovery already ran; the mode was stopped.')
+            saved=json.loads(self.file.read_text(encoding='utf-8'))
+            scheme=str(uuid.UUID(saved['scheme']))
+            if len(values)!=2 or any(type(v) is not int or not 1<=v<=100 for v in values):raise ValueError('Invalid temporary CPU cap')
+            if self.clock()>=saved['deadline']:raise RuntimeError('Temporary CPU deadline expired.')
+            for flag,value in zip(('/setacvalueindex','/setdcvalueindex'),values):self.command(flag,scheme,'SUB_PROCESSOR','PROCTHROTTLEMAX',str(value))
             self.command('/setactive',scheme)
+    def apply(self):
+        self.arm();self.set_values([1,1])
     def restore(self,force=False):
         with self.mutex.locked():
             if not self.file.exists():return
@@ -144,6 +154,7 @@ class Tweakout:
     def tick(self):
         with self.lock:
             if not self.active:return
+            self.audio_error=self.effects.reading().get('audioError','')
             if self.effects.stale():
                 self._finish('failed','The effects worker stalled or the laptop resumed after a delay. Shutdown was cancelled.');return
             if self.clock()>=self.active['end']:

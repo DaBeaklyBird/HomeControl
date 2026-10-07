@@ -19,6 +19,7 @@ from device_controls import Devices
 from network_limit import NetworkLimit
 from laptop_controls import Laptops
 from tweakout import Tweakout
+from gradual_lag import GradualLag
 from app_launcher import AppLauncher
 from win_support import cpu_state
 TOKEN_FILE = DATA / 'key.txt'
@@ -53,7 +54,7 @@ def enforce_limits():
     while not stop.wait(5):
         try:
             with control_lock:
-                if not tweakout.blocked():limits.tick()
+                if not tweakout.blocked() and not gradual_lag.blocked():limits.tick()
                 limit_error = ''
         except Exception as exc: limit_error = str(exc)
 
@@ -252,6 +253,7 @@ fps = FpsMonitor(ROOT, DATA)
 metrics = Metrics(fps, stop, smi)
 power_actions = PowerActions()
 tweakout = Tweakout(ROOT,DATA,shutdown=lambda:power_actions.execute('shutdown'),power_pending=lambda:bool(power_actions.status()['pending']))
+gradual_lag = GradualLag(tweakout.cpu,other_active=lambda:tweakout.active is not None,power_pending=lambda:bool(power_actions.status()['pending']))
 devices = Devices(DATA)
 network_limit = NetworkLimit(ROOT, DATA)
 laptops = Laptops(DATA,socket.gethostname())
@@ -271,6 +273,7 @@ def supervise():
         try:
             with control_lock:
                 tweakout.tick()
+                gradual_lag.tick()
                 power_actions.tick()
             network_limit.tick()
         except Exception as exc: print('Control supervisor:',exc)
@@ -331,8 +334,9 @@ class Handler(BaseHTTPRequestHandler):
                 code,result=laptops.relay(target,self.path)
                 return self.respond(result,502 if code==401 else code)
             except Exception as exc:return self.respond({'error':str(exc)},502)
-        if self.path == '/api/metrics': return self.respond({**metrics.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status(),'tweakout':tweakout.status()})
+        if self.path == '/api/metrics': return self.respond({**metrics.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status(),'tweakout':tweakout.status(),'gradualLag':gradual_lag.status()})
         if self.path == '/api/tweakout':return self.respond(tweakout.status())
+        if self.path == '/api/lag':return self.respond(gradual_lag.status())
         if self.path == '/api/apps':return self.respond(launcher.status())
         if self.path == '/api/network': return self.respond(network_limit.status())
         if self.path == '/api/fps': return self.respond(fps.status())
@@ -363,12 +367,16 @@ class Handler(BaseHTTPRequestHandler):
             if target!='local':
                 code,result=laptops.relay(target,self.path,body)
                 return self.respond(result,502 if code==401 else code)
-            exclusive={'/api/tweakout/start','/api/tweakout/cancel','/api/power','/api/restore','/api/gpu','/api/gpu/restore','/api/limits','/api/limits/remove','/api/power/action','/api/power/cancel'}
+            exclusive={'/api/lag/start','/api/lag/cancel','/api/tweakout/start','/api/tweakout/cancel','/api/power','/api/restore','/api/gpu','/api/gpu/restore','/api/limits','/api/limits/remove','/api/power/action','/api/power/cancel'}
             with control_lock if self.path in exclusive else nullcontext():
-                if self.path in exclusive and not self.path.startswith('/api/tweakout/') and tweakout.blocked():
-                    raise RuntimeError('Cancel Tweakout on this computer’s dashboard before changing power or app budgets.')
+                mode_route=self.path.startswith(('/api/tweakout/','/api/lag/'))
+                if self.path in exclusive and not mode_route and (tweakout.blocked() or gradual_lag.blocked()):
+                    raise RuntimeError('Cancel the active mode on this computer’s dashboard before changing power or app budgets.')
+                if self.path.startswith('/api/tweakout/') and gradual_lag.active is not None:raise RuntimeError('Cancel gradual lag before using Tweakout.')
                 if self.path == '/api/tweakout/start':return self.respond(tweakout.start(body.get('preview',False),body.get('confirmed',False)))
                 elif self.path == '/api/tweakout/cancel':return self.respond(tweakout.cancel())
+                elif self.path == '/api/lag/start':return self.respond(gradual_lag.start(body.get('floor',10),body.get('hold',30)))
+                elif self.path == '/api/lag/cancel':return self.respond(gradual_lag.cancel())
                 elif self.path == '/api/apps/refresh':return self.respond(launcher.refresh())
                 elif self.path == '/api/apps/launch':return self.respond(launcher.launch(body.get('id')))
                 elif self.path == '/api/power':
@@ -412,7 +420,7 @@ if __name__ == '__main__':
         sys.stdout = sys.stderr = open(DATA/'background.log', 'a', buffering=1, encoding='utf-8')
     if args.restore:
         failures = []
-        for restore in [lambda:tweakout.close(),lambda:timer_system_cap(None),lambda:set_power(restore=True), lambda:set_gpu(restore=True)]:
+        for restore in [lambda:gradual_lag.close(),lambda:tweakout.close(),lambda:timer_system_cap(None),lambda:set_power(restore=True), lambda:set_gpu(restore=True)]:
             try: restore()
             except Exception as exc: failures.append(str(exc))
         if failures: raise RuntimeError('; '.join(failures))
@@ -438,5 +446,5 @@ if __name__ == '__main__':
         try: server.serve_forever()
         except KeyboardInterrupt: stop.set()
         finally:
-            stop.set(); tweakout.close(); power_actions.cancel(); network_limit.stop(); fps.close()
+            stop.set(); gradual_lag.close(); tweakout.close(); power_actions.cancel(); network_limit.stop(); fps.close()
             limits.close(); server.server_close()
