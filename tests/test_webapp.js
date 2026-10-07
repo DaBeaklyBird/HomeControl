@@ -29,11 +29,20 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   let resolve;f=fixture();f.run("key='test-key'");f.context.fetch=()=>new Promise(done=>{resolve=done});
   const pending=f.run("api('/api/status')");f.run('forgetKey()');resolve({ok:true,json:async()=>({})});
   await assert.rejects(pending,/Connection changed/);
+  f=fixture();f.run("key='hub-key';selectedLaptop='gaming'");
+  let targetRequest;f.context.fetch=(url,options)=>{targetRequest=options;return new Promise(done=>{resolve=done})};
+  const targetPending=f.run("api('/api/metrics')");f.run("selectedLaptop='local'");resolve({ok:true,json:async()=>({})});
+  await assert.rejects(targetPending,/Connection changed/);assert.equal(targetRequest.headers['X-HomeControl-Device'],'gaming');
+  f.context.fetch=async(url,options)=>{targetRequest=options;return {ok:true,json:async()=>({})}};
+  f.run("selectedLaptop='gaming'");await f.run("api('/api/laptops')");assert.equal(targetRequest.headers['X-HomeControl-Device'],'local');
+  assert.equal(targetRequest.headers['X-Access-Key'],'hub-key');
+  f.run('document.hidden=true');assert.equal(f.run('pollingAllowed()'),false);
+  f.run("document.hidden=false;document.getElementById('liveUpdates').checked=true");assert.equal(f.run('pollingAllowed()'),true);
   const page=fs.readFileSync(path.join(root,'dashboard.html'),'utf8');
   for(const failSave of [false,true]){
     const calls=[],elements=new Map(),checkboxes=[{dataset:{group:'usb',device:'spare-usb'}}];
     const get=id=>{if(!elements.has(id))elements.set(id,{value:id==='deviceGroup'?'usb':'',hidden:true,textContent:id==='featureMessage'?'Selection failed':''});return elements.get(id)};
-    const context=vm.createContext({$:get,deviceDirty:true,devicesBusy:false,deviceData:{},document:{querySelectorAll:()=>checkboxes},
+    const context=vm.createContext({$:get,deviceDirty:true,devicesBusy:false,deviceData:{devices:[]},document:{querySelectorAll:()=>checkboxes},
       renderDevices:()=>{},refreshDevices:()=>{},feature:async(url,body)=>{calls.push({url,body});return url.endsWith('/selections')?(failSave?null:{selections:body.selections}):{results:[]}}});
     vm.runInContext(page.slice(page.indexOf('function currentDeviceSelections()'),page.indexOf("$('deviceEnable').onclick")),context);
     await vm.runInContext("deviceAction('restart')",context);
@@ -42,6 +51,19 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
     if(failSave){assert.equal(get('deviceResult').hidden,false);assert.equal(get('deviceResult').textContent,'Selection failed')}
     else{assert.equal(calls[1].url,'/api/devices/action');assert.equal(calls[1].body.action,'restart')}
   }
+  const confirmCalls=[],confirmElements=new Map();
+  const confirmGet=id=>{if(!confirmElements.has(id))confirmElements.set(id,{value:id==='deviceGroup'?'usb':'',hidden:true,textContent:''});return confirmElements.get(id)};
+  const confirmContext=vm.createContext({$:confirmGet,deviceDirty:false,devicesBusy:false,
+    deviceData:{devices:[{id:'hub',name:'USB hub',requiresConfirmation:true,warning:'Disconnects child devices'}]},
+    document:{querySelectorAll:()=>[{dataset:{group:'usb',device:'hub'}}]},renderDevices:()=>{},refreshDevices:()=>{},
+    feature:async(url,body)=>{confirmCalls.push({url,body});return {results:[]}}});
+  vm.runInContext(page.slice(page.indexOf('function currentDeviceSelections()'),page.indexOf("$('deviceEnable').onclick")),confirmContext);
+  await vm.runInContext("deviceAction('restart')",confirmContext);
+  assert.equal(confirmGet('deviceConfirm').hidden,false);assert.equal(confirmCalls.length,0);
+  confirmGet('deviceConfirmCancel').onclick();assert.equal(confirmGet('deviceConfirm').hidden,true);assert.equal(confirmCalls.length,0);
+  await vm.runInContext("deviceAction('restart')",confirmContext);await confirmGet('deviceConfirmContinue').onclick();
+  assert.equal(confirmCalls[0].body.confirmed,true);assert.equal(confirmCalls[0].url,'/api/devices/action');
+  assert(!page.includes('Start GPU workload'));assert(!page.includes('/api/gpu/load'));
   const networkCalls=[],networkElements=new Map();
   const networkGet=id=>{if(!networkElements.has(id))networkElements.set(id,{value:'',textContent:'',setAttribute:()=>{}});return networkElements.get(id)};
   const networkContext=vm.createContext({$:networkGet,api:async(url,body)=>{networkCalls.push({url,body});return {available:true,running:false,mbps:null}}});

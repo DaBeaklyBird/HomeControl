@@ -10,9 +10,8 @@ from unittest.mock import Mock,patch
 
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 from fps_monitor import Frames,FpsMonitor,CHECKSUM
-from gpu_load import GpuLoad
 from power_controls import PowerActions
-from device_controls import Devices,Journal,safe_inventory,INSTANCE
+from device_controls import Devices,Journal,safe_inventory,INSTANCE,pnp_action
 
 def row(uid,name='Spare',kind='HIDClass',parent='',problem=0,service=''):
     return {'id':uid,'name':name,'class':kind,'parent':parent,'problem':problem,'service':service}
@@ -96,41 +95,6 @@ class PowerTests(unittest.TestCase):
         p.clock=lambda:11; p.runner=Mock(side_effect=RuntimeError('denied')); p.tick()
         self.assertIn('denied',p.status()['error']); self.assertIsNone(p.status()['pending'])
 
-class GpuLoadTests(unittest.TestCase):
-    def setUp(self):
-        self.folder=tempfile.TemporaryDirectory(); self.load=GpuLoad(ROOT,Path(self.folder.name))
-    def tearDown(self): self.folder.cleanup()
-    def test_validation_defaults_and_no_resume(self):
-        with patch('gpu_load.adapters',return_value=[{'id':'gpu'}]):
-            for duty in (-1,91,False):
-                with self.assertRaises(ValueError): self.load.start('gpu',duty)
-            with self.assertRaises(ValueError): self.load.start('gpu',25,2)
-            with self.assertRaises(ValueError): self.load.start('gone')
-            proc=Mock(); proc.poll.return_value=None
-            with patch('gpu_load.subprocess.Popen',return_value=proc),patch('gpu_load.CommandJob'):
-                self.load.start('gpu'); self.assertEqual(self.load.config['duty'],25)
-                self.assertEqual(self.load.config['seconds'],60)
-                self.load.update(0); self.load.update(90)
-                fresh=GpuLoad(ROOT,Path(self.folder.name)); self.assertFalse(fresh.status()['running'])
-                self.load.stop(); self.assertTrue(proc.wait.called)
-    def activate(self):
-        self.load.process=Mock(); self.load.process.poll.return_value=None; self.load.job=Mock()
-        self.load.config={'adapter':'gpu','duty':25}; self.load.end=time.monotonic()+60
-    def test_thermal_stop_adapter_loss_timer_and_worker_failure(self):
-        for cause in ('heat','loss','timer','failure'):
-            self.activate(); gpus=[{'id':'gpu','temperatureC':None}]
-            if cause=='heat': gpus[0]['temperatureC']=85
-            if cause=='loss': gpus=[]
-            if cause=='timer': self.load.end=0
-            if cause=='failure': self.load.process.poll.return_value=1
-            job=self.load.job; self.load.tick(gpus)
-            self.assertFalse(self.load.status()['running']); job.close.assert_called_once()
-    def test_start_failure_closes_job(self):
-        with patch('gpu_load.adapters',return_value=[{'id':'gpu'}]),patch('gpu_load.CommandJob') as factory,patch('gpu_load.subprocess.Popen',side_effect=OSError('failed')):
-            with self.assertRaises(OSError): self.load.start('gpu')
-            factory.return_value.close.assert_called_once()
-            self.assertFalse(self.load.status()['running'])
-
 class DeviceTests(unittest.TestCase):
     def setUp(self):
         self.folder=tempfile.TemporaryDirectory(); self.data=Path(self.folder.name); self.now=0
@@ -144,14 +108,14 @@ class DeviceTests(unittest.TestCase):
                 if r['id']==uid: r['problem']=22 if verb=='disable' else 0
             return 'success'
         self.action=action
-        self.devices=Devices(self.data,inventory=lambda:self.rows,action=action,register=self.register,clock=lambda:self.now)
+        self.devices=Devices(self.data,inventory=lambda:self.rows,action=action,register=self.register,clock=lambda:self.now,connections=lambda:{})
     def tearDown(self): self.folder.cleanup()
     def test_protected_devices_network_and_storage_ancestors(self):
         storage=r'USB\DISK\BOOT'; parent=r'USB\COMPOSITE\PARENT'
         rows=self.rows+[row(NET,kind='Net',parent=parent),row(parent,kind='USB'),row(storage,kind='DiskDrive',parent=SPARE)]
         protected={d['id'] for d in safe_inventory(rows) if d['protected']}
         self.assertTrue({NET,parent,storage,SPARE,HUB}.issubset(protected))
-        with self.assertRaises(ValueError): self.devices.select({'usb':[HUB],'keyboard':[]})
+        self.assertIn(HUB,protected)
         self.assertFalse(INSTANCE.fullmatch('USB\\device;shutdown'))
     def test_combined_deduplication_and_recovery_after_sixty_seconds(self):
         self.devices.select({'usb':[KEYBOARD],'keyboard':[KEYBOARD]})
@@ -173,7 +137,7 @@ class DeviceTests(unittest.TestCase):
                 raise RuntimeError('unplugged')
             return self.action(action,uid)
         self.devices.action=partial; result=self.devices.perform('both','disable')
-        self.assertEqual([r['ok'] for r in result['results']],[False,True])
+        self.assertEqual({r['id']:r['ok'] for r in result['results']},{SPARE:False,KEYBOARD:True})
         self.now=61; self.rows=[r for r in self.rows if r['id']!=KEYBOARD]
         self.devices.reconcile(); records=self.devices.journal.read()
         self.assertIn(SPARE,records); self.assertIn(KEYBOARD,records)
@@ -196,5 +160,53 @@ class DeviceTests(unittest.TestCase):
         self.assertFalse(result['results'][0]['ok'])
         self.assertIn('without confirming',result['results'][0]['error'])
         self.assertIn(SPARE,self.devices.journal.read())
+
+    def test_hub_and_bluetooth_available_only_without_storage_or_network(self):
+        radio=r'USB\BLUETOOTH\RADIO';pan=r'BTH\MS_BTHPAN\PAN'
+        self.rows += [row(radio,kind='Bluetooth',service='BTHUSB',parent=HUB),
+                      row(pan,kind='Net',service='BthPan',parent=radio),
+                      row(r'BTHENUM\AUDIO\DEVICE',kind='System',parent=radio)]
+        inventory={d['id']:d for d in safe_inventory(self.rows,{pan.upper():False})}
+        for uid in [HUB,radio]:
+            self.assertFalse(inventory[uid]['protected']);self.assertTrue(inventory[uid]['requiresConfirmation'])
+        for connections in [{pan.upper():True},{}]:
+            inventory={d['id']:d for d in safe_inventory(self.rows,connections)}
+            self.assertTrue(inventory[HUB]['protected']);self.assertTrue(inventory[radio]['protected'])
+        self.rows.append(row(r'USB\DISK\SPARE',kind='DiskDrive',parent=HUB))
+        self.assertTrue(next(d for d in safe_inventory(self.rows,{pan.upper():False}) if d['id']==HUB)['protected'])
+
+    def test_hub_confirmation_journaling_and_parent_first_recovery(self):
+        self.devices.select({'usb':[HUB,SPARE],'keyboard':[]})
+        with self.assertRaisesRegex(ValueError,'Confirm'):self.devices.perform('usb','disable')
+        self.assertFalse(self.calls)
+        result=self.devices.perform('usb','disable',True)
+        self.assertTrue(all(r['ok'] for r in result['results']))
+        self.assertEqual(self.calls,[('disable',SPARE),('disable',HUB)])
+        self.now=61;self.devices.reconcile()
+        self.assertEqual(self.calls[-2:],[('enable',HUB),('enable',SPARE)])
+        self.assertEqual(self.devices.journal.read(),{})
+
+    def test_attachment_change_rejects_saved_hub_and_restart_arms_recovery(self):
+        self.devices.select({'usb':[HUB],'keyboard':[]})
+        self.rows.append(row(r'USB\DISK\NEW',kind='DiskDrive',parent=HUB))
+        result=self.devices.perform('usb','disable',True)
+        self.assertFalse(result['results'][0]['ok']);self.assertFalse(self.calls)
+        self.rows.pop();self.devices.perform('usb','restart',True)
+        self.assertTrue(self.devices.journal.read()[HUB]['wasEnabled']);self.register.assert_called()
+        self.now=61;self.devices.reconcile();self.assertEqual(self.devices.journal.read(),{})
+
+    def test_bluetooth_connection_change_blocks_action(self):
+        radio=r'USB\BLUETOOTH\RADIO';pan=r'BTH\MS_BTHPAN\PAN'
+        self.rows += [row(radio,kind='Bluetooth',service='BTHUSB',parent=HUB),row(pan,kind='Net',service='BthPan',parent=radio)]
+        connected={pan.upper():False};self.devices.connections=lambda:connected
+        self.devices.select({'usb':[radio],'keyboard':[]});connected[pan.upper()]=True
+        result=self.devices.perform('usb','restart',True)
+        self.assertFalse(result['results'][0]['ok']);self.assertFalse(self.calls)
+
+    def test_pnp_output_decodes_utf16_without_force_or_reboot(self):
+        result=Mock(returncode=0,stdout='Restart complete'.encode('utf-16'),stderr=b'')
+        with patch('device_controls.subprocess.run',return_value=result) as call:
+            self.assertEqual(pnp_action('restart',HUB),'Restart complete')
+            self.assertEqual(call.call_args.args[0],['pnputil.exe','/restart-device',HUB])
 
 if __name__=='__main__': unittest.main(verbosity=2)

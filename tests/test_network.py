@@ -27,18 +27,22 @@ class NetworkTests(unittest.TestCase):
     def test_native_filters_exclude_home_network_and_dashboard(self):
         api=Divert(ROOT)
         for direction in ('inbound','outbound'):api.check_filter(packet_filter(direction))
-        def packet(source,destination,source_port=50000,destination_port=443):
+        def packet(source,destination,source_port=50000,destination_port=443,udp=False):
             src=ipaddress.ip_address(source);dst=ipaddress.ip_address(destination)
             tcp=struct.pack('!HHLLBBHHH',source_port,destination_port,0,0,80,24,4096,0,0)+b'payload'
+            if udp:tcp=struct.pack('!HHHH',source_port,destination_port,15,0)+b'payload'
             if src.version==4:
-                return struct.pack('!BBHHHBBH4s4s',69,0,20+len(tcp),0,0,64,6,0,src.packed,dst.packed)+tcp
-            return struct.pack('!IHBB16s16s',6<<28,len(tcp),6,64,src.packed,dst.packed)+tcp
+                return struct.pack('!BBHHHBBH4s4s',69,0,20+len(tcp),0,0,64,17 if udp else 6,0,src.packed,dst.packed)+tcp
+            return struct.pack('!IHBB16s16s',6<<28,len(tcp),17 if udp else 6,64,src.packed,dst.packed)+tcp
         def matches(data,outbound=True):
             address=Address();address.flags=(1<<17 if outbound else 0)|(1<<20 if data[0]>>4==6 else 0)
             return bool(api.api.WinDivertHelperEvalFilter(packet_filter('outbound' if outbound else 'inbound').encode(),data,len(data),C.byref(address)))
         self.assertTrue(matches(packet('192.168.4.34','8.8.8.8')))
         self.assertFalse(matches(packet('192.168.4.34','192.168.4.20')))
         self.assertFalse(matches(packet('192.168.4.34','10.0.0.1')))
+        self.assertFalse(matches(packet('192.168.4.34','100.90.10.20')))
+        self.assertTrue(matches(packet('192.168.4.34','8.8.8.8',41641,50000,True)))
+        self.assertTrue(matches(packet('192.168.4.34','8.8.8.8',50000,443,True)))
         self.assertFalse(matches(packet('192.168.4.34','8.8.8.8',8765)))
         self.assertTrue(matches(packet('8.8.8.8','192.168.4.34'),False))
         self.assertFalse(matches(packet('192.168.4.20','192.168.4.34'),False))
