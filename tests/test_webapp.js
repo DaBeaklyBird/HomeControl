@@ -72,6 +72,52 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   assert.equal(vm.runInContext('networkRate(100)',networkContext),1000);assert.equal(vm.runInContext('networkRate(101)',networkContext),null);
   await networkGet('networkUnlimited').onclick();assert.equal(networkCalls[0].url,'/api/network');assert.equal(networkCalls[0].body.mbps,null);
   assert.equal(networkGet('networkValue').textContent,'Unlimited');
+  const tweakCalls=[],tweakElements=new Map();
+  const tweakGet=id=>{if(!tweakElements.has(id))tweakElements.set(id,{hidden:true,disabled:false,textContent:''});return tweakElements.get(id)};
+  const tweakContext=vm.createContext({$:tweakGet,Date,live:{tweakout:{preview:false}},powerDeadline:null,tweakoutDeadline:null,
+    tweakoutActive:false,tweakoutBusy:false,pendingTweakoutTarget:null,selectedLaptop:'gaming',laptopList:[{id:'gaming',name:'Gaming laptop'}],
+    refreshMetrics:async()=>{},feature:async(url,body)=>{tweakCalls.push({url,body});return {active:url.endsWith('/start'),seconds:body.preview?12:20,state:'cancelled'}}});
+  vm.runInContext(page.slice(page.indexOf('function tweakoutCountdown('),page.indexOf('let networkDirty=')),tweakContext);
+  tweakGet('tweakoutStart').onclick();assert.equal(tweakCalls.length,0);assert.equal(tweakGet('tweakoutConfirm').hidden,false);
+  assert(tweakGet('tweakoutConfirmText').textContent.includes('Gaming laptop'));
+  tweakGet('tweakoutBack').onclick();assert.equal(tweakCalls.length,0);assert.equal(tweakGet('tweakoutConfirm').hidden,true);
+  tweakGet('tweakoutStart').onclick();vm.runInContext("selectedLaptop='local'",tweakContext);
+  await tweakGet('tweakoutContinue').onclick();assert.equal(tweakCalls.length,0);
+  vm.runInContext("selectedLaptop='gaming'",tweakContext);tweakGet('tweakoutStart').onclick();await tweakGet('tweakoutContinue').onclick();
+  assert.equal(tweakCalls[0].url,'/api/tweakout/start');assert.equal(tweakCalls[0].body.confirmed,true);assert.equal(tweakCalls[0].body.preview,false);
+  assert.equal(tweakGet('tweakoutCancel').hidden,false);
+  await tweakGet('tweakoutCancel').onclick();assert.equal(tweakCalls[1].url,'/api/tweakout/cancel');
+  await tweakGet('tweakoutPreview').onclick();assert.equal(tweakCalls[2].body.preview,true);assert.equal(tweakCalls[2].body.confirmed,false);
+  vm.runInContext('renderTweakout({active:false,recoveryPending:true,state:"recovery_needed"})',tweakContext);
+  assert.equal(tweakGet('tweakoutCancel').hidden,false);assert.equal(tweakGet('tweakoutStart').disabled,true);
+  const appCalls=[],appElements=new Map();
+  const appGet=id=>{if(!appElements.has(id))appElements.set(id,{value:'',textContent:'',disabled:false});return appElements.get(id)};
+  const appContext=vm.createContext({$:appGet,setInterval:()=>{},key:'test-key',pollingAllowed:()=>true,
+    updateOptions:(id,choices,selected)=>{appGet(id).value=selected;appGet(id).choices=choices},
+    api:async(url,body)=>{appCalls.push({url,body});return url.endsWith('/launch')?{requested:true,name:'Calculator'}:{apps:[],ready:true,error:''}}});
+  vm.runInContext(page.slice(page.indexOf('let launchCatalog='),page.indexOf('function tweakoutCountdown(')),appContext);
+  vm.runInContext("renderLaunchApps({ready:true,error:'',apps:[{id:'calc',name:'Calculator',source:'Start menu'},{id:'game',name:'Spare Game',source:'Desktop shortcut'}]})",appContext);
+  assert.equal(appGet('launchApp').choices.length,2);appGet('launchSearch').value='calculator';appGet('launchSearch').oninput();
+  assert.equal(appGet('launchApp').choices.length,1);assert.equal(appGet('launchApp').value,'calc');
+  await appGet('launchButton').onclick();assert.equal(appCalls[0].url,'/api/apps/launch');assert.equal(appCalls[0].body.id,'calc');
+  assert(appGet('launchAppState').textContent.includes('Launch requested: Calculator'));
+  appGet('launchApp').value='unknown';await appGet('launchButton').onclick();assert.equal(appCalls.length,1);
+  await appGet('launchRefresh').onclick();assert.equal(appCalls[1].url,'/api/apps/refresh');assert.equal(appGet('launchButton').disabled,true);
+  const switchElements=new Map();const switchGet=id=>{if(!switchElements.has(id))switchElements.set(id,{value:'old command',textContent:'old output',replaceChildren(){this.value=''}});return switchElements.get(id)};
+  const switchContext=vm.createContext({$:switchGet,busy:false,terminalBusy:false,devicesBusy:false,networkBusy:false,tweakoutBusy:false,appLaunchBusy:true,laptopsLoading:false,
+    selectedLaptop:'local',launchCatalog:{apps:[{id:'old'}]},laptopList:[],deviceDirty:true,networkDirty:true,deviceData:{},status:{},live:{},
+    powerDeadline:10,powerAction:'restart',pendingTweakoutTarget:'local',tweakoutDeadline:20,tweakoutActive:true,
+    refresh:async()=>{switchContext.status={}},renderLaptops:()=>{}});
+  vm.runInContext(page.slice(page.indexOf('async function switchLaptop('),page.indexOf("$('laptopSelect').onchange")),switchContext);
+  await vm.runInContext("switchLaptop('desktop')",switchContext);assert.equal(switchContext.selectedLaptop,'local');
+  switchContext.appLaunchBusy=false;await vm.runInContext("switchLaptop('desktop')",switchContext);
+  assert.equal(switchContext.selectedLaptop,'desktop');assert.equal(switchContext.launchCatalog,null);
+  assert.equal(switchGet('command').value,'');assert.equal(switchGet('launchSearch').value,'');assert.equal(switchGet('launchButton').disabled,true);
+  assert.equal(switchContext.pendingTweakoutTarget,null);
+  // Parse the complete dashboard script as well as the isolated UI fixtures above.
+  new vm.Script(page.split('<script>')[1].split('</script>')[0]);
   console.log('Web app checks passed: opt-in storage, relaunch, disconnect, invalid key, standalone, blocked storage, stale requests.');
   console.log('Device UI and internet slider checks passed: selections saved before action, failure aborts, Mbps mapping, Unlimited removes cap.');
+  console.log('Tweakout UI checks passed: confirmation, selected laptop, effects-only preview and dashboard cancellation.');
+  console.log('App launcher checks passed: search, selected registered app, refresh, invalid selection and computer-switch reset.');
 })().catch(error=>{console.error(error);process.exitCode=1});
