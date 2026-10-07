@@ -26,3 +26,6 @@ device-selections.tmp
 device-recovery.json
 device-recovery.tmp
 dist/
+network-limit-*.json
+network-limit-*.tmp
+!vendor/windivert/WinDivert-2.2.2-source.zip

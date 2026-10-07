@@ -54,14 +54,17 @@ def raw_inventory():
 
 def safe_inventory(rows):
     by_id = {r['id'].upper():r for r in rows}
-    protected = set()
+    protected = {}
     for row in rows:
         kind = (row.get('class') or '').lower(); service = (row.get('service') or '').lower()
         name = (row.get('name') or '').lower()
         if kind in PROTECTED_CLASSES or service.startswith(('usbhub','usbxhci','usbehci','usbohci','usbuhci')) or 'usb root hub' in name or 'host controller' in name:
+            reason='Network device' if kind=='net' else 'Storage device' if kind in {'diskdrive','volume','scsiadapter','storage','hdc'} else 'USB hub or controller' if service.startswith(('usbhub','usbxhci','usbehci','usbohci','usbuhci')) or 'usb root hub' in name or 'host controller' in name else 'System device'
             current = row['id'].upper(); visited=set()
             while current and current not in visited:
-                visited.add(current); protected.add(current)
+                visited.add(current)
+                if current==row['id'].upper():protected[current]=reason
+                else:protected.setdefault(current,'Required by '+(row.get('name') or reason))
                 current = (by_id.get(current,{}).get('parent') or '').upper()
     result=[]
     for row in rows:
@@ -79,7 +82,7 @@ def safe_inventory(rows):
                        'groups':(['usb'] if usb else [])+(['keyboard'] if keyboard else []),
                        'enabled':None if row.get('problem') is None else row.get('problem')!=22,
                        'problemCode':row.get('problem'),'protected':bool(excluded),
-                       'reason':'Protected controller, network, storage or ancestor' if excluded else ''})
+                       'reason':('Protected · '+protected.get(uid.upper(),'Invalid device instance ID')) if excluded else ''})
     return result
 
 def pnp_action(action,uid):
@@ -219,6 +222,14 @@ class Devices:
                             except Exception:
                                 del records[uid]; self.journal.write(records); raise
                         output=self.action(action,uid)
+                        if action in ('enable','disable'):
+                            expected=22 if action=='disable' else None
+                            for attempt in range(5):
+                                state=next((r for r in self.inventory() if r['id'].upper()==uid.upper()),None)
+                                confirmed=state and state.get('problem') is not None and (state['problem']==22 if expected==22 else state['problem']!=22)
+                                if confirmed:break
+                                if attempt<4:time.sleep(.15)
+                            if not confirmed:raise RuntimeError('Windows returned without confirming the device '+('disabled' if action=='disable' else 'enabled')+' state. '+output)
                         # Never discard a recovery record based on command output alone.
                         if action=='enable' and uid in records:
                             state=next((r for r in self.inventory() if r['id']==uid),None)

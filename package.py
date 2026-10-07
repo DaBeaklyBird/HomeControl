@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 from zipfile import ZipFile,ZIP_DEFLATED
 from fps_monitor import CHECKSUM
+from network_native import verify_vendor
 
 ROOT=Path(__file__).resolve().parent
 FILES=['.gitignore','.gitattributes','README.md','VALIDATION.md','server.py','dashboard.html','app_limits.py',
@@ -14,8 +15,12 @@ FILES=['.gitignore','.gitattributes','README.md','VALIDATION.md','server.py','da
        'vendor/presentmon/PresentMon-2.6.0-x64.exe','vendor/presentmon/manifest.json',
        'vendor/presentmon/LICENSE.txt','vendor/presentmon/THIRD_PARTY.txt']
 FILES+=['manifest.webmanifest','apple-touch-icon.png','icon-192.png','icon-512.png','icon.svg','tests/test_webapp.js']
+FILES+=['network_native.py','network_worker.py','network_limit.py','tests/test_network.py','tests/network_fixture.py',
+        'vendor/windivert/WinDivert.dll','vendor/windivert/WinDivert64.sys','vendor/windivert/LICENSE',
+        'vendor/windivert/WINDIVERT.h','vendor/windivert/manifest.json','vendor/windivert/WinDivert-2.2.2-source.zip']
 
 def build(destination):
+    verify_vendor(ROOT)
     exe=ROOT/'vendor/presentmon/PresentMon-2.6.0-x64.exe'
     if hashlib.sha256(exe.read_bytes()).hexdigest()!=CHECKSUM: raise RuntimeError('PresentMon checksum mismatch')
     destination.parent.mkdir(parents=True,exist_ok=True)
@@ -28,5 +33,5 @@ def build(destination):
     print('Packaged',len(FILES),'source, setup, test and licensed helper files:',destination)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=ROOT/'dist'/'HomeControl-v3.1.zip')
+    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=ROOT/'dist'/'HomeControl-v3.2.zip')
     build(parser.parse_args().output)

@@ -17,6 +17,7 @@ from telemetry import Metrics
 from gpu_load import GpuLoad
 from power_controls import PowerActions
 from device_controls import Devices
+from network_limit import NetworkLimit
 TOKEN_FILE = DATA / 'key.txt'
 if not TOKEN_FILE.exists(): TOKEN_FILE.write_text(secrets.token_urlsafe(24))
 TOKEN = TOKEN_FILE.read_text().strip()
@@ -266,6 +267,7 @@ metrics = Metrics(fps, stop, smi)
 gpu_load = GpuLoad(ROOT, DATA)
 power_actions = PowerActions()
 devices = Devices(DATA)
+network_limit = NetworkLimit(ROOT, DATA)
 cap_cache = {'gpu':{'name':'GPU','available':False,'reason':'Checking GPU driver support…','canRestore':GPU_BACKUP.exists()},
              'gpuClocks':{'available':False,'reason':'Checking GPU driver support…'}}
 cap_refresh = threading.Event()
@@ -281,6 +283,7 @@ def supervise():
         try:
             power_actions.tick()
             gpu_load.tick(metrics.status()['gpus'])
+            network_limit.tick()
         except Exception as exc: print('Control supervisor:',exc)
 
 def maintain_devices():
@@ -327,7 +330,8 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if not self.authorized(): return self.respond({'error':'Enter the access key shown on the laptop.'},401)
-        if self.path == '/api/metrics': return self.respond({**metrics.status(),'gpuLoad':gpu_load.status(),'powerAction':power_actions.status()})
+        if self.path == '/api/metrics': return self.respond({**metrics.status(),'gpuLoad':gpu_load.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status()})
+        if self.path == '/api/network': return self.respond(network_limit.status())
         if self.path == '/api/fps': return self.respond(fps.status())
         if self.path == '/api/devices': return self.respond(devices.status())
         if self.path == '/api/gpu/load': return self.respond(gpu_load.status())
@@ -366,6 +370,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(gpu_load.start(body.get('adapter'),body.get('duty',25),body.get('minutes',1)))
             elif self.path == '/api/gpu/load/duty': return self.respond(gpu_load.update(body.get('duty')))
             elif self.path == '/api/gpu/load/stop': return self.respond(gpu_load.stop())
+            elif self.path == '/api/network':
+                if 'mbps' not in body:raise ValueError('Mbps is required; use null for Unlimited.')
+                return self.respond(network_limit.apply(body['mbps']))
             elif self.path == '/api/devices/refresh': devices.refresh(); return self.respond(devices.status())
             elif self.path == '/api/devices/selections': return self.respond(devices.select(body.get('selections')))
             elif self.path == '/api/devices/action': return self.respond(devices.perform(body.get('group'),body.get('action')))
@@ -419,5 +426,5 @@ if __name__ == '__main__':
         try: server.serve_forever()
         except KeyboardInterrupt: stop.set()
         finally:
-            stop.set(); power_actions.cancel(); gpu_load.stop('HomeControl closed'); fps.close()
+            stop.set(); power_actions.cancel(); gpu_load.stop('HomeControl closed'); network_limit.stop(); fps.close()
             limits.close(); server.server_close()
