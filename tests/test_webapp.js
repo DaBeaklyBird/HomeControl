@@ -29,5 +29,27 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   let resolve;f=fixture();f.run("key='test-key'");f.context.fetch=()=>new Promise(done=>{resolve=done});
   const pending=f.run("api('/api/status')");f.run('forgetKey()');resolve({ok:true,json:async()=>({})});
   await assert.rejects(pending,/Connection changed/);
+  const page=fs.readFileSync(path.join(root,'dashboard.html'),'utf8');
+  for(const failSave of [false,true]){
+    const calls=[],elements=new Map(),checkboxes=[{dataset:{group:'usb',device:'spare-usb'}}];
+    const get=id=>{if(!elements.has(id))elements.set(id,{value:id==='deviceGroup'?'usb':'',hidden:true,textContent:id==='featureMessage'?'Selection failed':''});return elements.get(id)};
+    const context=vm.createContext({$:get,deviceDirty:true,devicesBusy:false,deviceData:{},document:{querySelectorAll:()=>checkboxes},
+      renderDevices:()=>{},refreshDevices:()=>{},feature:async(url,body)=>{calls.push({url,body});return url.endsWith('/selections')?(failSave?null:{selections:body.selections}):{results:[]}}});
+    vm.runInContext(page.slice(page.indexOf('function currentDeviceSelections()'),page.indexOf("$('deviceEnable').onclick")),context);
+    await vm.runInContext("deviceAction('restart')",context);
+    assert.equal(calls[0].url,'/api/devices/selections');assert.equal(calls[0].body.selections.usb[0],'spare-usb');
+    assert.equal(calls.length,failSave?1:2);
+    if(failSave){assert.equal(get('deviceResult').hidden,false);assert.equal(get('deviceResult').textContent,'Selection failed')}
+    else{assert.equal(calls[1].url,'/api/devices/action');assert.equal(calls[1].body.action,'restart')}
+  }
+  const networkCalls=[],networkElements=new Map();
+  const networkGet=id=>{if(!networkElements.has(id))networkElements.set(id,{value:'',textContent:'',setAttribute:()=>{}});return networkElements.get(id)};
+  const networkContext=vm.createContext({$:networkGet,api:async(url,body)=>{networkCalls.push({url,body});return {available:true,running:false,mbps:null}}});
+  vm.runInContext(page.slice(page.indexOf('let networkDirty='),page.indexOf('</script>')),networkContext);
+  assert.equal(vm.runInContext('networkRate(0)',networkContext),.1);assert.equal(vm.runInContext('networkRate(25)',networkContext),1);
+  assert.equal(vm.runInContext('networkRate(100)',networkContext),1000);assert.equal(vm.runInContext('networkRate(101)',networkContext),null);
+  await networkGet('networkUnlimited').onclick();assert.equal(networkCalls[0].url,'/api/network');assert.equal(networkCalls[0].body.mbps,null);
+  assert.equal(networkGet('networkValue').textContent,'Unlimited');
   console.log('Web app checks passed: opt-in storage, relaunch, disconnect, invalid key, standalone, blocked storage, stale requests.');
+  console.log('Device UI and internet slider checks passed: selections saved before action, failure aborts, Mbps mapping, Unlimited removes cap.');
 })().catch(error=>{console.error(error);process.exitCode=1});

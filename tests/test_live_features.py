@@ -189,5 +189,12 @@ class DeviceTests(unittest.TestCase):
         self.assertEqual(self.devices.selections,{'usb':[],'keyboard':[]})
         with self.assertRaises(ValueError): self.devices.perform('both','disable')
         with self.assertRaises(ValueError): self.devices.select({'usb':['made-up'],'keyboard':[]})
+    def test_success_exit_without_disabled_state_is_reported_and_recovery_retained(self):
+        self.devices.select({'usb':[SPARE],'keyboard':[]})
+        self.devices.action=lambda action,uid:'Windows reported success'
+        result=self.devices.perform('usb','disable')
+        self.assertFalse(result['results'][0]['ok'])
+        self.assertIn('without confirming',result['results'][0]['error'])
+        self.assertIn(SPARE,self.devices.journal.read())
 
 if __name__=='__main__': unittest.main(verbosity=2)

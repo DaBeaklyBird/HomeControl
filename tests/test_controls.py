@@ -161,11 +161,11 @@ class Controls(unittest.TestCase):
                 with urllib.request.urlopen(req) as r:return r.status,json.load(r)
             except urllib.error.HTTPError as exc:return exc.code,json.load(exc)
         try:
-            for path in ['/api/metrics','/api/fps','/api/devices','/api/gpu/load','/api/power/action']:
+            for path in ['/api/metrics','/api/fps','/api/devices','/api/gpu/load','/api/power/action','/api/network']:
                 self.assertEqual(request(path,key='wrong')[0],401)
                 self.assertEqual(request(path)[0],200)
             for path in ['/api/fps/settings','/api/gpu/load/start','/api/gpu/load/duty','/api/gpu/load/stop',
-                         '/api/devices/refresh','/api/devices/selections','/api/devices/action','/api/power/action','/api/power/cancel']:
+                         '/api/devices/refresh','/api/devices/selections','/api/devices/action','/api/power/action','/api/power/cancel','/api/network']:
                 self.assertEqual(request(path,{},key='wrong')[0],401)
             with patch.object(app,'smi',side_effect=AssertionError('Slow discovery must not run here')):
                 self.assertEqual(request('/api/status')[0],200)
@@ -176,6 +176,10 @@ class Controls(unittest.TestCase):
             with patch.object(app.devices,'perform',return_value={'results':[]}) as call:
                 self.assertEqual(request('/api/devices/action',{'group':'both','action':'restart'})[0],200)
                 call.assert_called_once_with('both','restart')
+            self.assertEqual(request('/api/network',{})[0],400)
+            with patch.object(app.network_limit,'apply',return_value={'running':False,'mbps':None}) as call:
+                self.assertEqual(request('/api/network',{'mbps':None})[0],200)
+                call.assert_called_once_with(None)
         finally:server.shutdown();server.server_close()
 
 if __name__=='__main__':unittest.main(verbosity=2)
