@@ -1,0 +1,346 @@
+{
+  "format": 1,
+  "version": "3.7",
+  "files": [
+    {
+      "path": ".gitignore",
+      "mode": "text-lf",
+      "sha256": "15bc2a88e118f1895b358c479ae2323fe51f009914a67a394054926a4a04b0bb"
+    },
+    {
+      "path": ".gitattributes",
+      "mode": "text-lf",
+      "sha256": "2751aab4674eb6a420a6b4fbc04d1cd57e9e517a12e03749ad91dc555e23783b"
+    },
+    {
+      "path": "README.md",
+      "mode": "text-lf",
+      "sha256": "7a1f86142225214a4645246b2db2bb410b9035d531e87e89dc0c6c29366d6368"
+    },
+    {
+      "path": "VALIDATION.md",
+      "mode": "text-lf",
+      "sha256": "25ef278838b773dc3f3fa1eb6726d9ef0670129745ebd56856e2c0201cdeecc6"
+    },
+    {
+      "path": "server.py",
+      "mode": "text-lf",
+      "sha256": "6c801d84f4d757e92e32b50e7a69546ce698b9aa1a0876506b25eb00e9fda7d1"
+    },
+    {
+      "path": "dashboard.html",
+      "mode": "text-lf",
+      "sha256": "6cbe06ab804b7f0f5d7131157b981364f74edc1bec6020ecf1367ea4007cb156"
+    },
+    {
+      "path": "app_limits.py",
+      "mode": "text-lf",
+      "sha256": "29c0a986c8fdbb7067288b350810fd2f6e9f9d28170e48bdd71597d4d56d3e57"
+    },
+    {
+      "path": "remote_terminal.py",
+      "mode": "text-lf",
+      "sha256": "1b310337734f50125ca4a176db0d577df42f34b6299fda6c9c5f978e3c9cbb5c"
+    },
+    {
+      "path": "win_support.py",
+      "mode": "text-lf",
+      "sha256": "3a2acb1be5ca5fb8f1220fe6d945974ac124145db553cab89f390c19094350f8"
+    },
+    {
+      "path": "fps_monitor.py",
+      "mode": "text-lf",
+      "sha256": "1beeb9d8bbc2b06a7c6b8b8f01f9275e106c34e8512930b0fe19fade88654b08"
+    },
+    {
+      "path": "telemetry.py",
+      "mode": "text-lf",
+      "sha256": "4284d37d5310775d26291c0ec4c3885da13387c22e19db91f88d2f183213d22a"
+    },
+    {
+      "path": "gpu_native.py",
+      "mode": "text-lf",
+      "sha256": "dbb2f25fffe735721ee47d46e84964746cc78b4709a0f50c06f775b4a1a650c2"
+    },
+    {
+      "path": "power_controls.py",
+      "mode": "text-lf",
+      "sha256": "d8dd298c606c65b6f3a861b5c0166dff38f000de32e977df97cac721a0bbb853"
+    },
+    {
+      "path": "device_controls.py",
+      "mode": "text-lf",
+      "sha256": "d5c52ada9f927b51ba73540f64be80327f844b56db1068918bf19be089e8ba23"
+    },
+    {
+      "path": "package.py",
+      "mode": "text-lf",
+      "sha256": "754621e9b46d7996443c0657384698d2614f1d0b0fe7a26e43d4648ac17f6d0d"
+    },
+    {
+      "path": "Start.cmd",
+      "mode": "text-lf",
+      "sha256": "b419490ab618eb884a3aca77d4c31165158c8409e806355a7d53f3c42982a272"
+    },
+    {
+      "path": "Restore.cmd",
+      "mode": "text-lf",
+      "sha256": "0290aa70264abbf3190386ea01b53e87a0a59c00b1002925a3ad5e3e6f416dc6"
+    },
+    {
+      "path": "Startup.ps1",
+      "mode": "text-lf",
+      "sha256": "555baff74e08e4a6a5b34cef678a86dcc057b27b45c8df577bae0ec78f9cb055"
+    },
+    {
+      "path": "Install-Startup.cmd",
+      "mode": "text-lf",
+      "sha256": "9944b7513fd5c9003d6dd5557d080d6b4eaa03071820d733833851f03542b669"
+    },
+    {
+      "path": "Disable-Startup.cmd",
+      "mode": "text-lf",
+      "sha256": "a3442b2b6bcedc9b85932ad0a1d97e7f0317a1433a1d7988d490d729785d70a7"
+    },
+    {
+      "path": "Connection-Info.cmd",
+      "mode": "text-lf",
+      "sha256": "817121f7f6a276d217f87166986fa21130c062e6ab45f8e77313f650b524d6f8"
+    },
+    {
+      "path": "Connection-Info.ps1",
+      "mode": "text-lf",
+      "sha256": "142aaa5b68c4a3aa4820f881a1ab900ba4c10c480bd786b1c52a94fb014b8e61"
+    },
+    {
+      "path": "Enable-Terminal.cmd",
+      "mode": "text-lf",
+      "sha256": "c505330fab53700a5555048bf2096336d208a30e9ecfffd953c6ede6976fa946"
+    },
+    {
+      "path": "Disable-Terminal.cmd",
+      "mode": "text-lf",
+      "sha256": "c40022fe5974093657ef07fb5aa7bb5f8972c9e1dbca06f41bed75db59417bda"
+    },
+    {
+      "path": "Terminal-Settings.ps1",
+      "mode": "text-lf",
+      "sha256": "5bdfeb0d328555a86112f47bedd27e247f53b14c90e1d6b0a568fb69e5b90b70"
+    },
+    {
+      "path": "tests/test_controls.py",
+      "mode": "text-lf",
+      "sha256": "25ae76b1595906ff6b57749d018ad10a635682632f5a824ecd599ed709c2bbf6"
+    },
+    {
+      "path": "tests/test_live_features.py",
+      "mode": "text-lf",
+      "sha256": "fd6eaa46e9f3808a60c3ff07df3b1fab48dd454e3d1f20206fbfb7a2ea8328d0"
+    },
+    {
+      "path": "tests/render_fixture.py",
+      "mode": "text-lf",
+      "sha256": "b8d315f3fac0cb44c2c90990abf38458fed6453031109eb7ea0a01ae76ada158"
+    },
+    {
+      "path": "vendor/presentmon/PresentMon-2.6.0-x64.exe",
+      "mode": "binary",
+      "sha256": "b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af"
+    },
+    {
+      "path": "vendor/presentmon/manifest.json",
+      "mode": "text-lf",
+      "sha256": "78079ef20ccbf3bd7da7231a4e94f8034ee50405e291a96ec142a2b299d4c8a4"
+    },
+    {
+      "path": "vendor/presentmon/LICENSE.txt",
+      "mode": "text-lf",
+      "sha256": "4c949341b1893c8c6ad82f7fb4eedf622cd1fd9c22a9af8f19b2dac19d1947b6"
+    },
+    {
+      "path": "vendor/presentmon/THIRD_PARTY.txt",
+      "mode": "text-lf",
+      "sha256": "e039937f1a2fc2eb8f24a25b4229551a5a8056026d2da878507e20269eb56267"
+    },
+    {
+      "path": "manifest.webmanifest",
+      "mode": "text-lf",
+      "sha256": "cf3e8c5def5b8d447cd703644f4f58d4a70cd4bd33fd7b89632b2611548c07c0"
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "mode": "binary",
+      "sha256": "65dcdbf73358c6afd199af8223ec2bd9c764e0eb7d772d39ff6f65d78786c9f6"
+    },
+    {
+      "path": "icon-192.png",
+      "mode": "binary",
+      "sha256": "52bfea2d56873949b2b652af812bcef8ae5ba652854031036bb024fee743e9b2"
+    },
+    {
+      "path": "icon-512.png",
+      "mode": "binary",
+      "sha256": "2a6e76c8c991a1bb055f9b3dcb037e8776ede742afb15126b352b168b240f1b1"
+    },
+    {
+      "path": "icon.svg",
+      "mode": "text-lf",
+      "sha256": "4246ee9c34fa79ee5b472b735382ca6f9c6fe6c3648c97005e1b4ec80903b352"
+    },
+    {
+      "path": "tests/test_webapp.js",
+      "mode": "text-lf",
+      "sha256": "d01e9969f8dc04e9899173fd69ff6d3604e5d288dd1f2a3d4018f597bba7abde"
+    },
+    {
+      "path": "network_native.py",
+      "mode": "text-lf",
+      "sha256": "7267ee3b9a24a118124f280d175ae7ee6f0ec1a098c7924fda520f531e4fd8e1"
+    },
+    {
+      "path": "network_worker.py",
+      "mode": "text-lf",
+      "sha256": "0d34839309f6f22b28edecca7e3bfd9245c739af1ecc389abb1ebfde7ee85123"
+    },
+    {
+      "path": "network_limit.py",
+      "mode": "text-lf",
+      "sha256": "36681c3e1dd2a7b7d85dc54d698367d6695adb899df22e5dac6191822379c5d2"
+    },
+    {
+      "path": "tests/test_network.py",
+      "mode": "text-lf",
+      "sha256": "1d4205d5b445987850b0af7a1958d765e45f386c8305a3283d72f9b2bbb60b12"
+    },
+    {
+      "path": "tests/network_fixture.py",
+      "mode": "text-lf",
+      "sha256": "19b583d78f45ce0c7a9eff960c1c3956fad2ec01ec983d1bf89be051264d275d"
+    },
+    {
+      "path": "vendor/windivert/WinDivert.dll",
+      "mode": "binary",
+      "sha256": "c1e060ee19444a259b2162f8af0f3fe8c4428a1c6f694dce20de194ac8d7d9a2"
+    },
+    {
+      "path": "vendor/windivert/WinDivert64.sys",
+      "mode": "binary",
+      "sha256": "8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2"
+    },
+    {
+      "path": "vendor/windivert/LICENSE",
+      "mode": "binary",
+      "sha256": "14a0cb5214d536e4fdae6aa3f5696f981eeda106cd026e9794bba489ee79d628"
+    },
+    {
+      "path": "vendor/windivert/WINDIVERT.h",
+      "mode": "binary",
+      "sha256": "5017a1768c1592fd664c0c2d3d2d30f81fad4ab98d322b1914c6f0a33fcacdf9"
+    },
+    {
+      "path": "vendor/windivert/manifest.json",
+      "mode": "text-lf",
+      "sha256": "f8c5ec3653248571c97c1cf20237f6937549339d46e3a9b47a9d18414d3c38d4"
+    },
+    {
+      "path": "vendor/windivert/WinDivert-2.2.2-source.zip",
+      "mode": "binary",
+      "sha256": "366f83f7243e3bb4972a25af2329c6cbd761bba215a00f9f38d9d45603d9d51d"
+    },
+    {
+      "path": "laptop_controls.py",
+      "mode": "text-lf",
+      "sha256": "c182cb240f5e76f2b739141bda3629b8d9e67152c53f678e718a186a38b9a31e"
+    },
+    {
+      "path": "tests/test_laptops.py",
+      "mode": "text-lf",
+      "sha256": "dd288375b52a79d01d0cfcdbf7c8affcc501d5b3164c110dcd0500059dbf90b2"
+    },
+    {
+      "path": "tweakout.py",
+      "mode": "text-lf",
+      "sha256": "18f7bd8d62f32ee49cd490ae91ee5c60148d924aecfccd6992a60e72ca69a036"
+    },
+    {
+      "path": "tweakout_worker.py",
+      "mode": "text-lf",
+      "sha256": "0f69b4ed1382737adf7ecc3eeb3ecdf2051c0be1fbdc54cd45f61fbc80cf9f33"
+    },
+    {
+      "path": "tests/test_tweakout.py",
+      "mode": "text-lf",
+      "sha256": "6669dda946d5f08a609d8468f6939d703b5544259b594b8ab11050df73726f69"
+    },
+    {
+      "path": "app_launcher.py",
+      "mode": "text-lf",
+      "sha256": "da0829b1cfcdb4789ef5ce9ab363893366cc79fdd37c66ad112c725831d167fa"
+    },
+    {
+      "path": "tests/test_launcher.py",
+      "mode": "text-lf",
+      "sha256": "f1bac0e5f196e791debe053164e06126a305d031b3365229d9dfebca4e9d9784"
+    },
+    {
+      "path": "remote_keyboard.py",
+      "mode": "text-lf",
+      "sha256": "0d88a1612eb47bd5b85f9fee55e24f7f0ae3e4729f1e49489c29c622e297525c"
+    },
+    {
+      "path": "tests/test_keyboard.py",
+      "mode": "text-lf",
+      "sha256": "c663b1c7c7763f3df7609a9c8ccae0aab582fb6a23d853e9e3cda314dda73ddf"
+    },
+    {
+      "path": "gradual_lag.py",
+      "mode": "text-lf",
+      "sha256": "ae20cad6ba9f141d91f0b61e386e4d4a7d5fe8f2e9605d89203543fa2933bd2b"
+    },
+    {
+      "path": "tests/test_gradual_lag.py",
+      "mode": "text-lf",
+      "sha256": "e016b88a8802af9cfd7f0a03570645d7892416cdece03537053c7aeeee2216af"
+    },
+    {
+      "path": "tests/test_effects.py",
+      "mode": "text-lf",
+      "sha256": "5dad7e343ba20ef3155dbffc260aba2b03da7e193479f84c8f3e9203fbe7b186"
+    },
+    {
+      "path": "version.py",
+      "mode": "text-lf",
+      "sha256": "4d467271125fb36a1f09951203855f0c668dd914a31a04d554021d96990b33bc"
+    },
+    {
+      "path": "Update.cmd",
+      "mode": "text-lf",
+      "sha256": "1b69e3ca5f57336c4299a080bb7b2432528294c5b8d35e3a6b230e4879b37644"
+    },
+    {
+      "path": "Update.ps1",
+      "mode": "text-lf",
+      "sha256": "c9540f868745e96631c3f986f7c78104651b575cbea414d1b486b3e1d040ef8c"
+    },
+    {
+      "path": "Update-Core.ps1",
+      "mode": "text-lf",
+      "sha256": "f1c06c16fd22b592e7b084f0f24d47513839063c4531565581bc06c5fa3b8f1c"
+    },
+    {
+      "path": "INSTALL.md",
+      "mode": "text-lf",
+      "sha256": "aaacce7e0213ae0ae0979669fc38d62745d312f7fbcc724f7243e9864ee0e5dc"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "mode": "text-lf",
+      "sha256": "506cf295f91b71cb7126013ce83bd8fb5e6a4b955b79de901b107342421d6613"
+    },
+    {
+      "path": "tests/test_updater.ps1",
+      "mode": "text-lf",
+      "sha256": "505399342963c9390dc26de2f151be7d939ee6bf82c0298866363e6bba6ee458"
+    }
+  ]
+}

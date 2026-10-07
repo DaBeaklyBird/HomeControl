@@ -161,12 +161,11 @@ class FaultDisplay:
             self.text(w*.16,h*.17,':(',64,'#e2ebf4')
             self.text(w*.16,h*.34,"Your device ran into a display problem.\nThe current session could not be recovered.",24,'#e2ebf4',width=w*.67)
             self.text(w*.16,h*.57,'Stop code: VIDEO_TDR_FAILURE\nWhat failed: display rendering session',14,'#b7c9da')
-        self.text(20,h-23,'HomeControl • visual effect',10,'#aab7c6')
 
 def main(data):
     control=data/'tweakout-control.json';result=data/'tweakout-result.json';audio=data/'tweakout-audio.wav'
     cfg=json.loads(control.read_text(encoding='utf-8'));mode_id=cfg['id'];started=time.monotonic()
-    root=tk.Tk();root.title('HomeControl Tweakout — visual effects')
+    root=tk.Tk();root.title('Display effects')
     root.attributes('-fullscreen',True);root.attributes('-topmost',True)
     canvas=tk.Canvas(root,background='#20334c',highlightthickness=0);canvas.pack(fill='both',expand=True)
     root.update();display=FaultDisplay(canvas,canvas.winfo_width(),canvas.winfo_height())

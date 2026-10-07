@@ -3,6 +3,7 @@ from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from contextlib import contextmanager,nullcontext
+from version import VERSION
 
 ROOT = Path(__file__).parent
 DATA = Path(os.environ.get('LOCALAPPDATA', str(ROOT))) / 'HomeControl'
@@ -12,6 +13,7 @@ if os.environ.get('HOMECONTROL_DATA'): DATA = Path(os.environ['HOMECONTROL_DATA'
 DATA.mkdir(parents=True, exist_ok=True)
 from app_limits import Limits
 from remote_terminal import Terminal
+from remote_keyboard import send as send_keyboard
 from fps_monitor import FpsMonitor
 from telemetry import Metrics
 from power_controls import PowerActions
@@ -351,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
             _, caps = power_state()
             power_error = ''
         except Exception as exc: caps, power_error = [None,None], str(exc)
-        self.respond({'active':active,'apps':[{'name':r[0],'today':r[1],'week':r[2]} for r in rows], 'ac':caps[0], 'battery':caps[1], 'error':error or power_error or limit_error, 'canRestore':BACKUP.exists(), **cap_cache,'limits':limits.status(),'terminalEnabled':terminal_is_enabled()})
+        self.respond({'version':VERSION,'active':active,'apps':[{'name':r[0],'today':r[1],'week':r[2]} for r in rows], 'ac':caps[0], 'battery':caps[1], 'error':error or power_error or limit_error, 'canRestore':BACKUP.exists(), **cap_cache,'limits':limits.status(),'terminalEnabled':terminal_is_enabled()})
     def do_POST(self):
         if not self.authorized(): return self.respond({'error':'Access denied'},401)
         # Custom header + JSON and no CORS prevent cross-site form control.
@@ -401,6 +403,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(body.get('app'),str): raise ValueError('App name required')
                     limits.remove(body['app'])
                     limits.tick()
+                elif self.path == '/api/keyboard':return self.respond(send_keyboard(body))
                 elif self.path == '/api/terminal':
                     if not terminal_is_enabled(): return self.respond({'error':'Run Enable-Terminal.cmd on the laptop to enable commands.'},403)
                     return self.respond(terminal.run(body.get('command'),body.get('cwd')))

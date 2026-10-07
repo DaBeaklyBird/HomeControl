@@ -1,4 +1,4 @@
-param([switch]$Remove, [string]$PythonExecutable)
+param([switch]$Remove, [string]$PythonExecutable, [string]$DataFolder)
 $ErrorActionPreference = 'Stop'
 $taskName = 'HomeControl'
 if ($Remove) {
@@ -29,11 +29,16 @@ if ($PythonExecutable) {
 }
 if (-not $pythonPath -or $LASTEXITCODE -ne 0) { throw 'Install Python 3 first.' }
 $pythonPath = ($pythonPath | Select-Object -Last 1).Trim()
+& $pythonPath -c 'import sys,struct,tkinter; assert sys.version_info >= (3,10) and struct.calcsize(chr(80))==8'
+if ($LASTEXITCODE -ne 0) { throw 'Install regular 64-bit Python 3.10 or newer with Tcl/Tk.' }
 $windowless = Join-Path (Split-Path -Parent $pythonPath) 'pythonw.exe'
 if (-not (Test-Path -LiteralPath $windowless)) { throw 'pythonw.exe missing. Repair Python installation.' }
 $serverPath = Join-Path $PSScriptRoot 'server.py'
-$dataFolder = Join-Path $env:LOCALAPPDATA 'HomeControl'
-[System.IO.File]::WriteAllText((Join-Path $PSScriptRoot 'data-location.txt'), $dataFolder)
+$locationFile = Join-Path $PSScriptRoot 'data-location.txt'
+if (-not $DataFolder -and (Test-Path -LiteralPath $locationFile)) { $DataFolder = (Get-Content -LiteralPath $locationFile -Raw).Trim() }
+if (-not $DataFolder) { $DataFolder = Join-Path $env:LOCALAPPDATA 'HomeControl' }
+$DataFolder = [IO.Path]::GetFullPath($DataFolder)
+[System.IO.File]::WriteAllText($locationFile, $DataFolder)
 $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($existing) {
     Stop-ScheduledTask -TaskName $taskName

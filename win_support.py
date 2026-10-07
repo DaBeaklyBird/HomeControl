@@ -4,6 +4,7 @@ import ctypes as C
 from ctypes import wintypes as W
 import json
 import subprocess
+import time
 import uuid
 
 HIDDEN = subprocess.CREATE_NO_WINDOW
@@ -33,7 +34,15 @@ def atomic_json(path, value, private=False):
         [IO.File]::SetAccessControl($cfg.path,$acl)
         ''')
     temp.write_text(json.dumps(value),encoding='utf-8')
-    temp.replace(path)
+    # Windows readers can briefly hold a handle without delete sharing.
+    for attempt in range(8):
+        try:
+            temp.replace(path)
+            break
+        except PermissionError:
+            if attempt == 7:
+                raise
+            time.sleep(0.025)
 
 class GUID(C.Structure):
     _fields_=[('data',C.c_ubyte*16)]

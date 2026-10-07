@@ -1,14 +1,16 @@
-# HomeControl
+# HomeControl 3.7
 
-A Windows 10/11 background app for desktops and laptops, with an iPhone dashboard on your home network. Python 3 with Tcl/Tk is required for the optional screen effects; no third-party Python packages are needed.
+A Windows 10/11 background app for desktops and laptops, with an iPhone dashboard on your home network. Requires x64 Windows and 64-bit Python 3.10+ with Tcl/Tk; no third-party Python packages are needed.
+
+**Start here: [full installation and update guide](INSTALL.md).** Download the ZIP from [Releases](https://github.com/DaBeaklyBird/HomeControl/releases), or Code → Download ZIP. This repository may require GitHub access to download; the dashboard runs locally without an account.
+
+Features include CPU/NVIDIA caps, live readings and App FPS, app time/budgets, app/game launching, remote keyboard and optional PowerShell, internet limiting, selected device controls, power actions and multiple Windows computers. Hardware support varies; unsupported controls report unavailable. See [release history](CHANGELOG.md) and [completed validation](VALIDATION.md).
 
 ## Install or update on the controlled computer
 
-1. Stop the old version: run Disable-Startup.cmd as administrator and close any manual Start.cmd window.
-2. Replace the application files in the same permanent folder, including all Python files and the vendor folder. Your usage data and keys remain in the existing data folder. Keep the folder in place while any device recovery is pending.
-3. Run Install-Startup.cmd as administrator using your usual Windows administrator account. It starts the app now and at each Windows sign-in, in the background, including on battery.
-4. Run Connection-Info.cmd. It verifies the key against the live server and prints the phone address and automatic sign-in link. Keep that link private.
-5. Open the address in Safari while on the same home Wi-Fi. Set the laptop's Wi-Fi network profile to Private. The startup installer allows port 8765 only on Private networks from the local subnet. Do not forward this port on your router.
+For a **first install**, extract the ZIP into a permanent folder, install regular 64-bit Python with Tcl/Tk, then run **Install-Startup.cmd as administrator** using your usual Windows account. Run **Connection-Info.cmd** for the address/key and open that address in Safari on the same Private home Wi-Fi.
+
+For an **update**, extract the new ZIP into a separate folder outside the old installation and run **Update.cmd as administrator**. It locates the old task/folder, validates the package, cancels active transient controls, backs up replaced files and data, replaces app files, reinstalls/enables sign-in startup, starts the app and checks the new version. It preserves keys, history and settings. Failures roll back app files/startup configuration. CPU recovery must finish first; device journals are locked during copying and disconnected recovery records are preserved. Full steps and recovery instructions are in [INSTALL.md](INSTALL.md). Automatic OTA updates are not implemented.
 
 Start.cmd runs manually with a console; keep it open for that mode. Startup runs at Windows sign-in, not before login. The laptop must be awake and connected. Keep the app folder in place or reinstall startup after moving it. Logs are in the data folder's background.log. Disable-Startup.cmd stops the scheduled copy and removes its task/firewall rule; it does not restore power limits.
 
@@ -60,11 +62,11 @@ Lock acts immediately. Restart and shutdown begin a ten-second countdown with a 
 
 ## Tweakout mode
 
-The dashboard can start a simulated glitch on the selected computer: stacked Windows-style fault dialogs, localized display corruption and a crash-screen effect. A stronger buzz is mixed with four local Windows error/hardware-failure sounds, with generated tones when those files are unavailable. The computer screen has no countdown. A small HomeControl visual-effect label remains. It does not restart the graphics driver. There is no Cancel button or Escape shortcut in the computer effect; **Cancel Tweakout & restore CPU is only on the dashboard**.
+The dashboard can start a simulated glitch on the selected computer: stacked Windows-style fault dialogs, localized display corruption and a crash-screen effect. A stronger buzz is mixed with four local Windows error/hardware-failure sounds, with generated tones when those files are unavailable. The computer screen has no countdown. The effect window uses the title Display effects, without HomeControl text. It does not restart the graphics driver. There is no Cancel button or Escape shortcut in the computer effect; **Cancel Tweakout & restore CPU is only on the dashboard**.
 
 Audio uses bounded direct Windows waveform output and loops until the effect stops. If the default sound mapper fails, HomeControl tries an available output directly. It respects existing speaker/app volume and never changes the master volume. Muted/zero-volume speakers produce a dashboard warning. Check the selected computer's output and volume if the preview is silent. Sounds are read from that computer's Windows Media folder at runtime; Windows sound files are not redistributed. Output buffers are retained until native playback is reset and closed. See [Windows waveform playback](https://learn.microsoft.com/en-us/windows/win32/multimedia/using-waveform-audio) and [audio endpoint volume](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nn-endpointvolume-iaudioendpointvolume).
 
-**Preview effects only** runs for 12 seconds without changing CPU settings or requesting shutdown. Full mode requires a separate confirmation naming the selected computer. It sets the Windows maximum processor state to 1% for charger and battery, runs a 20-second countdown, then restores the previous CPU settings before requesting normal Windows shutdown with `/t 0` and no `/f`. This CPU setting is a performance request, not a guaranteed utilization/clock percentage. Unsaved applications can delay or prevent shutdown. Cancel remains available until the countdown dispatches shutdown; keep the dashboard connected to that laptop. The effect is clearly labelled as a simulation on screen.
+**Preview effects only** runs for 12 seconds without changing CPU settings or requesting shutdown. Full mode requires two confirmation steps naming the selected computer, plus an acknowledgment that work is saved and the computer will shut down. It sets the Windows maximum processor state to 1% for charger and battery, runs a 20-second countdown, then restores the previous CPU settings before requesting normal Windows shutdown with `/t 0` and no `/f`. This CPU setting is a performance request, not a guaranteed utilization/clock percentage. Unsaved applications can delay or prevent shutdown. Cancel remains available until the countdown dispatches shutdown; keep the dashboard connected to that laptop. The dialogs and crash screen are visual effects; they do not create actual Windows errors.
 
 HomeControl journals the exact pre-sequence CPU values and verifies an independent elevated **HomeControl-TweakoutRecovery-…** task before applying the cap. Cancel, helper failure, a stalled helper, a delayed resume, normal app exit or a rejected shutdown restores those values. If the app crashes, the recovery task restores them after 60 seconds and retries every minute or at sign-in. Startup also reconciles outstanding records. Failed recovery retains its record and blocks another sequence; Cancel retries restoration. The signed-in account and laptop must be awake for the recovery task to run. Keep the application folder in place until recovery finishes. The mode never resumes automatically at startup.
 
@@ -137,3 +139,7 @@ Hardware acceptance: compare App FPS to an actual game's built-in counter on Iri
 New authenticated endpoints: GET /api/metrics, /api/laptops, /api/fps, /api/devices and /api/power/action; POST /api/laptops, /api/laptops/remove, /api/fps/settings, /api/devices/refresh, /api/devices/selections, /api/devices/action, /api/power/action and /api/power/cancel. All require the existing X-Access-Key header. Runtime settings, saved computer keys and recovery records are gitignored and omitted from the update ZIP.
 
 References: [Windows CPU-rate job controls](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information), [NVIDIA nvidia-smi controls](https://docs.nvidia.com/deploy/nvidia-smi/index.html).
+
+## Remote keyboard
+
+Use Send text and the special-key buttons to type into the focused application on the selected unlocked Windows computer. The panel works from iPhone or another computer and uses the existing access key. It sends complete press/release pairs, never retains held keys, and cannot type into the lock screen or secure Windows prompts. Refresh the dashboard after updating each computer.
