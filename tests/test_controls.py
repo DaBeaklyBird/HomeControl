@@ -94,6 +94,10 @@ class Controls(unittest.TestCase):
             with patch.object(app,'terminal_enabled',True),patch.object(app.terminal,'run',return_value={'output':'ok'}) as run:
                 self.assertEqual(request('/api/terminal',{'command':'whoami'})[1]['output'],'ok')
                 run.assert_called_once_with('whoami',None)
+            self.assertEqual(request('/api/keyboard',{'kind':'text','text':'hello'},'wrong')[0],401)
+            with patch.object(app,'send_keyboard',return_value={'sent':5}) as send:
+                self.assertEqual(request('/api/keyboard',{'kind':'text','text':'hello'})[1]['sent'],5)
+                send.assert_called_once_with({'kind':'text','text':'hello'})
         finally:server.shutdown();server.server_close()
     def test_native_job_on_disposable_child(self):
         from app_limits import CpuJob,Rate,k

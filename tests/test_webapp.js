@@ -67,7 +67,7 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   const networkCalls=[],networkElements=new Map();
   const networkGet=id=>{if(!networkElements.has(id))networkElements.set(id,{value:'',textContent:'',setAttribute:()=>{}});return networkElements.get(id)};
   const networkContext=vm.createContext({$:networkGet,api:async(url,body)=>{networkCalls.push({url,body});return {available:true,running:false,mbps:null}}});
-  vm.runInContext(page.slice(page.indexOf('let networkDirty='),page.indexOf('</script>')),networkContext);
+  vm.runInContext(page.slice(page.indexOf('let networkDirty='),page.indexOf('async function sendKeyboard(')),networkContext);
   assert.equal(vm.runInContext('networkRate(0)',networkContext),.1);assert.equal(vm.runInContext('networkRate(25)',networkContext),1);
   assert.equal(vm.runInContext('networkRate(100)',networkContext),1000);assert.equal(vm.runInContext('networkRate(101)',networkContext),null);
   await networkGet('networkUnlimited').onclick();assert.equal(networkCalls[0].url,'/api/network');assert.equal(networkCalls[0].body.mbps,null);
@@ -75,7 +75,7 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   const tweakCalls=[],tweakElements=new Map();
   const tweakGet=id=>{if(!tweakElements.has(id))tweakElements.set(id,{hidden:true,disabled:false,textContent:''});return tweakElements.get(id)};
   const tweakContext=vm.createContext({$:tweakGet,Date,live:{tweakout:{preview:false}},powerDeadline:null,tweakoutDeadline:null,
-    tweakoutActive:false,tweakoutBusy:false,lagBusy:false,pendingTweakoutTarget:null,selectedLaptop:'gaming',laptopList:[{id:'gaming',name:'Gaming laptop'}],
+    tweakoutActive:false,tweakoutBusy:false,lagBusy:false,tweakoutConfirmStage:0,pendingTweakoutTarget:null,selectedLaptop:'gaming',laptopList:[{id:'gaming',name:'Gaming laptop'}],
     refreshMetrics:async()=>{},feature:async(url,body)=>{tweakCalls.push({url,body});return {active:url.endsWith('/start'),seconds:body.preview?12:20,state:'cancelled'}}});
   vm.runInContext(page.slice(page.indexOf('function tweakoutCountdown('),page.indexOf('let networkDirty=')),tweakContext);
   tweakGet('tweakoutStart').onclick();assert.equal(tweakCalls.length,0);assert.equal(tweakGet('tweakoutConfirm').hidden,false);
@@ -84,6 +84,9 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   tweakGet('tweakoutStart').onclick();vm.runInContext("selectedLaptop='local'",tweakContext);
   await tweakGet('tweakoutContinue').onclick();assert.equal(tweakCalls.length,0);
   vm.runInContext("selectedLaptop='gaming'",tweakContext);tweakGet('tweakoutStart').onclick();await tweakGet('tweakoutContinue').onclick();
+  assert.equal(tweakCalls.length,0);assert.equal(tweakGet('tweakoutFinalAckRow').hidden,false);assert.equal(tweakGet('tweakoutContinue').disabled,true);
+  await tweakGet('tweakoutContinue').onclick();assert.equal(tweakCalls.length,0);
+  tweakGet('tweakoutFinalAck').checked=true;tweakGet('tweakoutFinalAck').onchange();await tweakGet('tweakoutContinue').onclick();
   assert.equal(tweakCalls[0].url,'/api/tweakout/start');assert.equal(tweakCalls[0].body.confirmed,true);assert.equal(tweakCalls[0].body.preview,false);
   assert.equal(tweakGet('tweakoutCancel').hidden,false);
   await tweakGet('tweakoutCancel').onclick();assert.equal(tweakCalls[1].url,'/api/tweakout/cancel');
@@ -113,7 +116,7 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   const switchElements=new Map();const switchGet=id=>{if(!switchElements.has(id))switchElements.set(id,{value:'old command',textContent:'old output',replaceChildren(){this.value=''}});return switchElements.get(id)};
   const switchContext=vm.createContext({$:switchGet,busy:false,terminalBusy:false,devicesBusy:false,networkBusy:false,tweakoutBusy:false,lagBusy:false,appLaunchBusy:true,laptopsLoading:false,
     selectedLaptop:'local',launchCatalog:{apps:[{id:'old'}]},laptopList:[],deviceDirty:true,networkDirty:true,deviceData:{},status:{},live:{},
-    powerDeadline:10,powerAction:'restart',pendingTweakoutTarget:'local',tweakoutDeadline:20,tweakoutActive:true,
+    powerDeadline:10,powerAction:'restart',pendingTweakoutTarget:'local',tweakoutConfirmStage:2,tweakoutDeadline:20,tweakoutActive:true,
     refresh:async()=>{switchContext.status={}},renderLaptops:()=>{}});
   vm.runInContext(page.slice(page.indexOf('async function switchLaptop('),page.indexOf("$('laptopSelect').onchange")),switchContext);
   await vm.runInContext("switchLaptop('desktop')",switchContext);assert.equal(switchContext.selectedLaptop,'local');
@@ -122,10 +125,21 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   assert.equal(switchGet('command').value,'');assert.equal(switchGet('launchSearch').value,'');assert.equal(switchGet('launchButton').disabled,true);
   assert.equal(switchContext.pendingTweakoutTarget,null);
   assert.equal(switchGet('lagCancel').hidden,true);assert.equal(switchGet('lagStart').disabled,true);
+  assert.equal(switchGet('keyboardText').value,'');assert.equal(switchGet('keyboardState').textContent,'');
+  const keyboardCalls=[],keyboardElements=new Map(),keyButtons=[];
+  const keyboardGet=id=>{if(!keyboardElements.has(id))keyboardElements.set(id,{value:'',textContent:'',appendChild:b=>keyButtons.push(b)});return keyboardElements.get(id)};
+  const keyboardContext=vm.createContext({$:keyboardGet,selectedLaptop:'desktop',document:{createElement:()=>({})},api:async(url,body)=>{keyboardCalls.push({url,body});return {sent:5}}});
+  vm.runInContext(page.slice(page.indexOf('async function sendKeyboard('),page.indexOf('</script>')),keyboardContext);
+  keyboardGet('keyboardText').value='hello';await keyboardGet('keyboardSend').onclick();
+  assert.equal(keyboardCalls[0].url,'/api/keyboard');assert.equal(keyboardCalls[0].body.text,'hello');assert.equal(keyboardCalls[0].body.kind,'text');
+  assert.equal(keyButtons.length,10);await keyButtons.find(b=>b.textContent==='Enter').onclick();assert.equal(keyboardCalls[1].body.key,'Enter');
+  keyboardContext.api=async()=>{throw Error('Windows blocked input')};await keyboardGet('keyboardSend').onclick();
+  assert.equal(keyboardGet('keyboardState').textContent,'Windows blocked input');assert.equal(keyboardGet('keyboardSend').disabled,false);
   // Parse the complete dashboard script as well as the isolated UI fixtures above.
   new vm.Script(page.split('<script>')[1].split('</script>')[0]);
   console.log('Web app checks passed: opt-in storage, relaunch, disconnect, invalid key, standalone, blocked storage, stale requests.');
   console.log('Device UI and internet slider checks passed: selections saved before action, failure aborts, Mbps mapping, Unlimited removes cap.');
   console.log('Tweakout UI checks passed: confirmation, selected laptop, effects-only preview and dashboard cancellation.');
   console.log('App launcher checks passed: search, selected registered app, refresh, invalid selection and computer-switch reset.');
+  console.log('Remote keyboard checks passed: text/key dispatch, errors and computer-switch reset.');
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -6,11 +6,23 @@ import sys
 import tempfile
 import unittest
 import wave
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tweakout_worker import make_audio,read_sound,FaultDisplay,WavePlayer,RATE,AUDIO_SECONDS
 
 class EffectsTests(unittest.TestCase):
+    def test_atomic_json_retries_transient_lock_and_reports_persistent_lock(self):
+        from win_support import atomic_json
+        with tempfile.TemporaryDirectory() as folder:
+            target=Path(folder)/'control.json'
+            with patch.object(Path,'replace',side_effect=[PermissionError('busy'),None]) as replace, patch('win_support.time.sleep') as sleep:
+                atomic_json(target,{'begin':True})
+                self.assertEqual(replace.call_count,2)
+                sleep.assert_called_once_with(0.025)
+            with patch.object(Path,'replace',side_effect=PermissionError('denied')) as replace, patch('win_support.time.sleep'):
+                with self.assertRaises(PermissionError):atomic_json(target,{'begin':True})
+                self.assertEqual(replace.call_count,8)
+
     def player_fixture(self,failure=''):
         api=Mock();api.waveOutGetNumDevs.return_value=3
         def open_device(handle,device,*args):
@@ -70,7 +82,7 @@ class EffectsTests(unittest.TestCase):
         for elapsed in (0,5,9):
             canvas=Canvas();FaultDisplay(canvas,1600,1000).draw(elapsed)
             content='\n'.join(canvas.text)
-            self.assertIn('HomeControl • visual effect',content);self.assertNotIn('countdown',content.lower())
+            self.assertNotIn('HomeControl',content);self.assertNotIn('countdown',content.lower())
             self.assertNotIn('CPU',content);self.assertNotIn('seconds',content)
         self.assertIn('VIDEO_TDR_FAILURE',content)
 
