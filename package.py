@@ -20,6 +20,7 @@ FILES+=['network_native.py','network_worker.py','network_limit.py','tests/test_n
         'vendor/windivert/WINDIVERT.h','vendor/windivert/manifest.json','vendor/windivert/WinDivert-2.2.2-source.zip']
 FILES+=['laptop_controls.py','tests/test_laptops.py']
 FILES+=['tweakout.py','tweakout_worker.py','tests/test_tweakout.py']
+FILES+=['app_launcher.py','tests/test_launcher.py']
 
 def build(destination):
     verify_vendor(ROOT)
@@ -35,5 +36,5 @@ def build(destination):
     print('Packaged',len(FILES),'source, setup, test and licensed helper files:',destination)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=ROOT/'dist'/'HomeControl-v3.4.zip')
+    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=ROOT/'dist'/'HomeControl-v3.5.zip')
     build(parser.parse_args().output)

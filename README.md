@@ -1,8 +1,8 @@
 # HomeControl
 
-A Windows background app with an iPhone dashboard on your home network. Python 3 with Tcl/Tk is required for the optional screen effects; no third-party Python packages are needed.
+A Windows 10/11 background app for desktops and laptops, with an iPhone dashboard on your home network. Python 3 with Tcl/Tk is required for the optional screen effects; no third-party Python packages are needed.
 
-## Install or update on the controlled laptop
+## Install or update on the controlled computer
 
 1. Stop the old version: run Disable-Startup.cmd as administrator and close any manual Start.cmd window.
 2. Replace the application files in the same permanent folder, including all Python files and the vendor folder. Your usage data and keys remain in the existing data folder. Keep the folder in place while any device recovery is pending.
@@ -12,15 +12,23 @@ A Windows background app with an iPhone dashboard on your home network. Python 3
 
 Start.cmd runs manually with a console; keep it open for that mode. Startup runs at Windows sign-in, not before login. The laptop must be awake and connected. Keep the app folder in place or reinstall startup after moving it. Logs are in the data folder's background.log. Disable-Startup.cmd stops the scheduled copy and removes its task/firewall rule; it does not restore power limits.
 
-## Multiple laptops on home Wi-Fi
+## Multiple Windows computers on home Wi-Fi
 
-Install HomeControl on each Windows laptop and run **Install-Startup.cmd as administrator** using that laptop’s own Windows account. Keep existing keys and data folders when updating. Run Connection-Info.cmd on the second laptop and copy its home-network address and access key.
+Install HomeControl on each Windows desktop or laptop and run **Install-Startup.cmd as administrator** using that computer’s own Windows account. Keep existing keys and data folders when updating. Run Connection-Info.cmd on the second computer and copy its home-network address and access key.
 
-Open the first laptop’s dashboard on your iPhone, expand **Laptops → Add another laptop**, enter a name, the other laptop’s `http://192.168.x.x:8765/` address and its key, then tap **Add laptop**. Choose the laptop in **Control laptop**. CPU/GPU settings, app time, daily budgets, FPS, internet caps, devices, power actions and terminal commands now apply to the selected laptop. Switching clears unsaved device choices and terminal output so one laptop’s controls are not carried to another. The dashboard rejects stale responses after a switch.
+Open the first computer’s dashboard on your iPhone, expand **Computers → Add another computer**, enter a name, the other laptop’s `http://192.168.x.x:8765/` address and its key, then tap **Add computer**. Choose the laptop in **Control computer**. CPU/GPU settings, app time, daily budgets, FPS, internet caps, devices, power actions and terminal commands now apply to the selected computer. Switching clears unsaved device choices and terminal output so one laptop’s controls are not carried to another. The dashboard rejects stale responses after a switch.
 
-The first laptop relays requests on the home network and stores the other laptop’s key only in its private runtime data folder. Target keys never appear in API responses or GitHub. Both laptops must be awake with HomeControl running on the same LAN; the first laptop must remain available while its dashboard controls the second. The iPhone needs only Safari and the first dashboard’s key. No ngrok, Tailscale, additional account or internet tunnel is required. If an address changes, remove the saved laptop and add its new address/key. Removing a saved laptop only removes its connection entry; it does not uninstall that laptop or erase its usage data.
+The first computer relays requests on the home network and stores the other laptop’s key only in its private runtime data folder. Target keys never appear in API responses or GitHub. Both computers must be awake with HomeControl running on the same LAN; the first computer must remain available while its dashboard controls the second. The iPhone needs only Safari and the first dashboard’s key. No ngrok, Tailscale, additional account or internet tunnel is required. If an address changes, remove the saved computer and add its new address/key. Removing a saved computer only removes its connection entry; it does not uninstall that laptop or erase its usage data.
 
-Only literal private IPv4 addresses on port 8765 are accepted. Redirects and system web proxies are refused so saved keys are sent only to the configured laptop. All hub endpoints and relayed controls require the first laptop’s existing access key. The home-network firewall rule remains limited to the local subnet on the Private profile.
+Only literal private IPv4 addresses on port 8765 are accepted. Redirects and system web proxies are refused so saved keys are sent only to the configured laptop. All hub endpoints and relayed controls require the first computer’s existing access key. The home-network firewall rule remains limited to the local subnet on the Private profile.
+
+## Launch apps and games
+
+Choose a computer at the top, then use **Launch apps & games** to search its installed apps, choose an app and tap **Launch on selected computer**. This opens the app on that Windows computer, including desktops. The signed-in Windows desktop session must be available. No terminal setup is needed. Launching an already-running app can bring its existing window forward instead of creating a new instance.
+
+The list includes [Windows Start-menu app IDs](https://learn.microsoft.com/en-us/powershell/module/startlayout/get-startapps) and available desktop `.lnk` shortcuts, plus Steam/Epic desktop game shortcuts. Add a desktop shortcut for a missing game and tap **Refresh installed apps**. Cloud-only shortcuts are skipped while unavailable. Discovery runs independently of telemetry; the dashboard reads a cached list. Only an ID from that computer's inventory can be launched; the endpoint accepts no arbitrary executable path, arguments or shell command. Inventory is rechecked by Windows before dispatch. Applications launch through the signed-in Explorer desktop context rather than inheriting HomeControl's administrator process. An app that itself requires elevation can still prompt locally; HomeControl does not approve that prompt.
+
+GET `/api/apps` returns names, source labels and opaque IDs. POST `/api/apps/refresh` with `{}` refreshes the inventory. POST `/api/apps/launch` takes `{ "id": "selected-id" }`. All require the existing access key and support selected-computer relaying. A successful response means Windows accepted the launch request; it does not guarantee that the app will finish starting. Refresh after installing or removing apps. Switching computers clears app choices, search text and terminal input/output. The older `/api/laptops` routes and `laptops.json` storage remain compatible so existing saved computers and keys are preserved.
 
 ## Live readings and App FPS
 
@@ -46,15 +54,15 @@ Authenticated GET /api/network returns state; POST /api/network accepts `{ "mbps
 
 `python tests/network_fixture.py` is an optional administrator acceptance check. It temporarily shapes disposable localhost transfers on its own port at 4 Mbps, then verifies unrestricted transfers after closing its handles. It does not shape the real internet or the HomeControl port.
 
-## Laptop power
+## Computer power
 
 Lock acts immediately. Restart and shutdown begin a ten-second countdown with a Cancel button. At the deadline HomeControl asks Windows to close applications normally using shutdown.exe with `/t 0` and without `/f`. The countdown is kept inside HomeControl because a nonzero Windows shutdown timeout implies forced closure. Unsaved applications can prevent or delay completion. Closing HomeControl cancels a pending countdown. Sleep and wake are not offered.
 
 ## Tweakout mode
 
-The dashboard can start a simulated glitch on the selected laptop: a fullscreen corrupted-display effect with slow dark colour changes, fake diagnostic text and a bounded synthetic buzz. It does not restart the graphics driver. Audio uses the existing Windows volume. There is no Cancel button or Escape shortcut in the laptop effect; **Cancel Tweakout & restore CPU is only on the dashboard**.
+The dashboard can start a simulated glitch on the selected computer: a fullscreen corrupted-display effect with slow dark colour changes, fake diagnostic text and a bounded synthetic buzz. It does not restart the graphics driver. Audio uses the existing Windows volume. There is no Cancel button or Escape shortcut in the laptop effect; **Cancel Tweakout & restore CPU is only on the dashboard**.
 
-**Preview effects only** runs for 12 seconds without changing CPU settings or requesting shutdown. Full mode requires a separate confirmation naming the selected laptop. It sets the Windows maximum processor state to 1% for charger and battery, runs a 20-second countdown, then restores the previous CPU settings before requesting normal Windows shutdown with `/t 0` and no `/f`. This CPU setting is a performance request, not a guaranteed utilization/clock percentage. Unsaved applications can delay or prevent shutdown. Cancel remains available until the countdown dispatches shutdown; keep the dashboard connected to that laptop. The effect is clearly labelled as a simulation on screen.
+**Preview effects only** runs for 12 seconds without changing CPU settings or requesting shutdown. Full mode requires a separate confirmation naming the selected computer. It sets the Windows maximum processor state to 1% for charger and battery, runs a 20-second countdown, then restores the previous CPU settings before requesting normal Windows shutdown with `/t 0` and no `/f`. This CPU setting is a performance request, not a guaranteed utilization/clock percentage. Unsaved applications can delay or prevent shutdown. Cancel remains available until the countdown dispatches shutdown; keep the dashboard connected to that laptop. The effect is clearly labelled as a simulation on screen.
 
 HomeControl journals the exact pre-sequence CPU values and verifies an independent elevated **HomeControl-TweakoutRecovery-…** task before applying the cap. Cancel, helper failure, a stalled helper, a delayed resume, normal app exit or a rejected shutdown restores those values. If the app crashes, the recovery task restores them after 60 seconds and retries every minute or at sign-in. Startup also reconciles outstanding records. Failed recovery retains its record and blocks another sequence; Cancel retries restoration. The signed-in account and laptop must be awake for the recovery task to run. Keep the application folder in place until recovery finishes. The mode never resumes automatically at startup.
 
@@ -118,6 +126,6 @@ Hardware acceptance: compare App FPS to an actual game's built-in counter on Iri
 
 `python tests/render_fixture.py` opens a small Direct3D 11 test window for eight seconds and compares its 60 FPS reference against the dashboard. It temporarily pins itself, then restores automatic tracking. This optional fixture expects the local installed server and data-location.txt. See VALIDATION.md for completed checks and remaining hardware acceptance.
 
-New authenticated endpoints: GET /api/metrics, /api/laptops, /api/fps, /api/devices and /api/power/action; POST /api/laptops, /api/laptops/remove, /api/fps/settings, /api/devices/refresh, /api/devices/selections, /api/devices/action, /api/power/action and /api/power/cancel. All require the existing X-Access-Key header. Runtime settings, saved laptop keys and recovery records are gitignored and omitted from the update ZIP.
+New authenticated endpoints: GET /api/metrics, /api/laptops, /api/fps, /api/devices and /api/power/action; POST /api/laptops, /api/laptops/remove, /api/fps/settings, /api/devices/refresh, /api/devices/selections, /api/devices/action, /api/power/action and /api/power/cancel. All require the existing X-Access-Key header. Runtime settings, saved computer keys and recovery records are gitignored and omitted from the update ZIP.
 
 References: [Windows CPU-rate job controls](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information), [NVIDIA nvidia-smi controls](https://docs.nvidia.com/deploy/nvidia-smi/index.html).

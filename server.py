@@ -19,6 +19,7 @@ from device_controls import Devices
 from network_limit import NetworkLimit
 from laptop_controls import Laptops
 from tweakout import Tweakout
+from app_launcher import AppLauncher
 from win_support import cpu_state
 TOKEN_FILE = DATA / 'key.txt'
 if not TOKEN_FILE.exists(): TOKEN_FILE.write_text(secrets.token_urlsafe(24))
@@ -145,7 +146,7 @@ def smi(*args):
     if not executable:
         candidate = Path(os.environ.get('ProgramFiles', r'C:\Program Files'))/'NVIDIA Corporation'/'NVSMI'/'nvidia-smi.exe'
         if candidate.exists(): executable = str(candidate)
-    if not executable: raise RuntimeError('NVIDIA driver tool not found. Install the NVIDIA driver on this laptop.')
+    if not executable: raise RuntimeError('NVIDIA driver tool not found. Install the NVIDIA driver on this computer.')
     result = subprocess.run([executable,*args], capture_output=True, text=True, timeout=15, creationflags=0x08000000)
     if result.returncode: raise RuntimeError(result.stderr.strip() or result.stdout.strip() or 'GPU control rejected by driver')
     return result.stdout
@@ -254,6 +255,7 @@ tweakout = Tweakout(ROOT,DATA,shutdown=lambda:power_actions.execute('shutdown'),
 devices = Devices(DATA)
 network_limit = NetworkLimit(ROOT, DATA)
 laptops = Laptops(DATA,socket.gethostname())
+launcher = AppLauncher()
 cap_cache = {'gpu':{'name':'GPU','available':False,'reason':'Checking GPU driver support…','canRestore':GPU_BACKUP.exists()},
              'gpuClocks':{'available':False,'reason':'Checking GPU driver support…'}}
 cap_refresh = threading.Event()
@@ -286,6 +288,11 @@ def maintain_devices():
         except Exception as exc: devices.error=str(exc)
         if stop.wait(5): break
 
+def maintain_apps():
+    while not stop.is_set():
+        launcher.refresh()
+        if stop.wait(120):break
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def respond(self, value, status=200):
@@ -316,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if not self.authorized(): return self.respond({'error':'Enter the access key shown on the laptop.'},401)
+        if not self.authorized(): return self.respond({'error':'Enter the access key shown on the computer.'},401)
         if self.path == '/api/laptops': return self.respond(laptops.status())
         target=self.headers.get('X-HomeControl-Device','local')
         if target!='local':
@@ -326,6 +333,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:return self.respond({'error':str(exc)},502)
         if self.path == '/api/metrics': return self.respond({**metrics.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status(),'tweakout':tweakout.status()})
         if self.path == '/api/tweakout':return self.respond(tweakout.status())
+        if self.path == '/api/apps':return self.respond(launcher.status())
         if self.path == '/api/network': return self.respond(network_limit.status())
         if self.path == '/api/fps': return self.respond(fps.status())
         if self.path == '/api/devices': return self.respond(devices.status())
@@ -358,9 +366,11 @@ class Handler(BaseHTTPRequestHandler):
             exclusive={'/api/tweakout/start','/api/tweakout/cancel','/api/power','/api/restore','/api/gpu','/api/gpu/restore','/api/limits','/api/limits/remove','/api/power/action','/api/power/cancel'}
             with control_lock if self.path in exclusive else nullcontext():
                 if self.path in exclusive and not self.path.startswith('/api/tweakout/') and tweakout.blocked():
-                    raise RuntimeError('Cancel Tweakout on this laptop’s dashboard before changing power or app budgets.')
+                    raise RuntimeError('Cancel Tweakout on this computer’s dashboard before changing power or app budgets.')
                 if self.path == '/api/tweakout/start':return self.respond(tweakout.start(body.get('preview',False),body.get('confirmed',False)))
                 elif self.path == '/api/tweakout/cancel':return self.respond(tweakout.cancel())
+                elif self.path == '/api/apps/refresh':return self.respond(launcher.refresh())
+                elif self.path == '/api/apps/launch':return self.respond(launcher.launch(body.get('id')))
                 elif self.path == '/api/power':
                     value = body.get('value')
                     if type(value) is not int or not 1 <= value <= 100: raise ValueError('Choose 1–100%')
@@ -418,6 +428,7 @@ if __name__ == '__main__':
         threading.Thread(target=discover_caps, daemon=True).start()
         threading.Thread(target=supervise, daemon=True).start()
         threading.Thread(target=maintain_devices, daemon=True).start()
+        threading.Thread(target=maintain_apps, daemon=True).start()
         print('HomeControl — keep this window open. Ctrl+C stops tracking.')
         print('Access key:', TOKEN)
         for ip in sorted(set(socket.gethostbyname_ex(socket.gethostname())[2])):
