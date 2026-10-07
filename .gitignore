@@ -33,4 +33,7 @@ ngrok*.yaml
 online-settings.*
 laptops.json
 laptops.tmp
+tweakout-*.json
+tweakout-*.tmp
+tweakout-*.wav
 !vendor/windivert/WinDivert-2.2.2-source.zip

@@ -2,7 +2,7 @@ import ctypes, datetime, json, os, secrets, socket, sqlite3, subprocess, threadi
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import contextmanager,nullcontext
 
 ROOT = Path(__file__).parent
 DATA = Path(os.environ.get('LOCALAPPDATA', str(ROOT))) / 'HomeControl'
@@ -18,12 +18,15 @@ from power_controls import PowerActions
 from device_controls import Devices
 from network_limit import NetworkLimit
 from laptop_controls import Laptops
+from tweakout import Tweakout
+from win_support import cpu_state
 TOKEN_FILE = DATA / 'key.txt'
 if not TOKEN_FILE.exists(): TOKEN_FILE.write_text(secrets.token_urlsafe(24))
 TOKEN = TOKEN_FILE.read_text().strip()
 DB = DATA / 'usage.sqlite'
 lock = threading.Lock()
 power_lock = threading.Lock()
+control_lock = threading.RLock()
 active = 'Starting'
 error = ''
 stop = threading.Event()
@@ -47,7 +50,10 @@ limit_error = ''
 def enforce_limits():
     global limit_error
     while not stop.wait(5):
-        try: limits.tick(); limit_error = ''
+        try:
+            with control_lock:
+                if not tweakout.blocked():limits.tick()
+                limit_error = ''
         except Exception as exc: limit_error = str(exc)
 
 user = ctypes.WinDLL('user32', use_last_error=True)
@@ -102,28 +108,7 @@ def command(*args):
     return result.stdout
 
 def power_state():
-    # Windows Power APIs avoid parsing localized powercfg output.
-    powr = ctypes.WinDLL('powrprof')
-    class GUID(ctypes.Structure):
-        _fields_ = [('a', wintypes.DWORD), ('b', wintypes.WORD), ('c', wintypes.WORD), ('d', ctypes.c_ubyte*8)]
-    import uuid
-    def guid(value): return GUID.from_buffer_copy(uuid.UUID(value).bytes_le)
-    ptr = ctypes.POINTER(GUID)()
-    if powr.PowerGetActiveScheme(None, ctypes.byref(ptr)): raise RuntimeError('Cannot read active power plan')
-    try:
-        scheme = str(uuid.UUID(bytes_le=bytes(ptr.contents)))
-        sub = guid('54533251-82be-4824-96c1-47b60b740d00')
-        setting = guid('bc5038f7-23e0-4960-96da-33abaf5935ec')
-        values = []
-        for name in ['PowerReadACValueIndex', 'PowerReadDCValueIndex']:
-            value = wintypes.DWORD()
-            if getattr(powr, name)(None, ptr, ctypes.byref(sub), ctypes.byref(setting), ctypes.byref(value)):
-                raise RuntimeError('Maximum processor state is unavailable on this laptop')
-            values.append(value.value)
-        return scheme, values
-    finally:
-        kernel.LocalFree.argtypes = [ctypes.c_void_p]
-        kernel.LocalFree(ptr)
+    return cpu_state()
 
 BACKUP = DATA / 'original-power.json'
 GPU_BACKUP = DATA / 'original-gpu.json'
@@ -265,6 +250,7 @@ def set_power(value=None, restore=False):
 fps = FpsMonitor(ROOT, DATA)
 metrics = Metrics(fps, stop, smi)
 power_actions = PowerActions()
+tweakout = Tweakout(ROOT,DATA,shutdown=lambda:power_actions.execute('shutdown'),power_pending=lambda:bool(power_actions.status()['pending']))
 devices = Devices(DATA)
 network_limit = NetworkLimit(ROOT, DATA)
 laptops = Laptops(DATA,socket.gethostname())
@@ -281,7 +267,9 @@ def discover_caps():
 def supervise():
     while not stop.wait(.25):
         try:
-            power_actions.tick()
+            with control_lock:
+                tweakout.tick()
+                power_actions.tick()
             network_limit.tick()
         except Exception as exc: print('Control supervisor:',exc)
 
@@ -336,7 +324,8 @@ class Handler(BaseHTTPRequestHandler):
                 code,result=laptops.relay(target,self.path)
                 return self.respond(result,502 if code==401 else code)
             except Exception as exc:return self.respond({'error':str(exc)},502)
-        if self.path == '/api/metrics': return self.respond({**metrics.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status()})
+        if self.path == '/api/metrics': return self.respond({**metrics.status(),'powerAction':power_actions.status(),'networkLimit':network_limit.status(),'tweakout':tweakout.status()})
+        if self.path == '/api/tweakout':return self.respond(tweakout.status())
         if self.path == '/api/network': return self.respond(network_limit.status())
         if self.path == '/api/fps': return self.respond(fps.status())
         if self.path == '/api/devices': return self.respond(devices.status())
@@ -366,34 +355,40 @@ class Handler(BaseHTTPRequestHandler):
             if target!='local':
                 code,result=laptops.relay(target,self.path,body)
                 return self.respond(result,502 if code==401 else code)
-            if self.path == '/api/power':
-                value = body.get('value')
-                if type(value) is not int or not 1 <= value <= 100: raise ValueError('Choose 1–100%')
-                if TIMER_BACKUP.exists(): raise RuntimeError('A laptop timer cap is active. Remove or raise its time budget before changing the CPU slider.')
-                set_power(value)
-            elif self.path == '/api/restore': set_power(restore=True)
-            elif self.path == '/api/gpu': set_gpu(body.get('value'), mode=body.get('mode','power'))
-            elif self.path == '/api/gpu/restore': set_gpu(restore=True)
-            elif self.path == '/api/fps/settings': return self.respond(fps.settings(body.get('enabled'),body.get('pid')))
-            elif self.path == '/api/network':
-                if 'mbps' not in body:raise ValueError('Mbps is required; use null for Unlimited.')
-                return self.respond(network_limit.apply(body['mbps']))
-            elif self.path == '/api/devices/refresh': devices.refresh(); return self.respond(devices.status())
-            elif self.path == '/api/devices/selections': return self.respond(devices.select(body.get('selections')))
-            elif self.path == '/api/devices/action': return self.respond(devices.perform(body.get('group'),body.get('action'),body.get('confirmed',False)))
-            elif self.path == '/api/power/action': return self.respond(power_actions.request(body.get('action')))
-            elif self.path == '/api/power/cancel': return self.respond(power_actions.cancel())
-            elif self.path == '/api/limits': limits.save(body.get('app'),body.get('minutes'),body.get('percent'),body.get('scope','app')); limits.tick()
-            elif self.path == '/api/limits/remove':
-                if not isinstance(body.get('app'),str): raise ValueError('App name required')
-                limits.remove(body['app'])
-                limits.tick()
-            elif self.path == '/api/terminal':
-                if not terminal_is_enabled(): return self.respond({'error':'Run Enable-Terminal.cmd on the laptop to enable commands.'},403)
-                return self.respond(terminal.run(body.get('command'),body.get('cwd')))
-            else: return self.respond({'error':'Not found'},404)
-            if self.path.startswith('/api/gpu'): cap_refresh.set()
-            self.respond({'ok':True})
+            exclusive={'/api/tweakout/start','/api/tweakout/cancel','/api/power','/api/restore','/api/gpu','/api/gpu/restore','/api/limits','/api/limits/remove','/api/power/action','/api/power/cancel'}
+            with control_lock if self.path in exclusive else nullcontext():
+                if self.path in exclusive and not self.path.startswith('/api/tweakout/') and tweakout.blocked():
+                    raise RuntimeError('Cancel Tweakout on this laptop’s dashboard before changing power or app budgets.')
+                if self.path == '/api/tweakout/start':return self.respond(tweakout.start(body.get('preview',False),body.get('confirmed',False)))
+                elif self.path == '/api/tweakout/cancel':return self.respond(tweakout.cancel())
+                elif self.path == '/api/power':
+                    value = body.get('value')
+                    if type(value) is not int or not 1 <= value <= 100: raise ValueError('Choose 1–100%')
+                    if TIMER_BACKUP.exists(): raise RuntimeError('A laptop timer cap is active. Remove or raise its time budget before changing the CPU slider.')
+                    set_power(value)
+                elif self.path == '/api/restore': set_power(restore=True)
+                elif self.path == '/api/gpu': set_gpu(body.get('value'), mode=body.get('mode','power'))
+                elif self.path == '/api/gpu/restore': set_gpu(restore=True)
+                elif self.path == '/api/fps/settings': return self.respond(fps.settings(body.get('enabled'),body.get('pid')))
+                elif self.path == '/api/network':
+                    if 'mbps' not in body:raise ValueError('Mbps is required; use null for Unlimited.')
+                    return self.respond(network_limit.apply(body['mbps']))
+                elif self.path == '/api/devices/refresh': devices.refresh(); return self.respond(devices.status())
+                elif self.path == '/api/devices/selections': return self.respond(devices.select(body.get('selections')))
+                elif self.path == '/api/devices/action': return self.respond(devices.perform(body.get('group'),body.get('action'),body.get('confirmed',False)))
+                elif self.path == '/api/power/action': return self.respond(power_actions.request(body.get('action')))
+                elif self.path == '/api/power/cancel': return self.respond(power_actions.cancel())
+                elif self.path == '/api/limits': limits.save(body.get('app'),body.get('minutes'),body.get('percent'),body.get('scope','app')); limits.tick()
+                elif self.path == '/api/limits/remove':
+                    if not isinstance(body.get('app'),str): raise ValueError('App name required')
+                    limits.remove(body['app'])
+                    limits.tick()
+                elif self.path == '/api/terminal':
+                    if not terminal_is_enabled(): return self.respond({'error':'Run Enable-Terminal.cmd on the laptop to enable commands.'},403)
+                    return self.respond(terminal.run(body.get('command'),body.get('cwd')))
+                else: return self.respond({'error':'Not found'},404)
+                if self.path.startswith('/api/gpu'): cap_refresh.set()
+                self.respond({'ok':True})
         except Exception as exc: self.respond({'error':str(exc)},400)
 
 if __name__ == '__main__':
@@ -407,7 +402,7 @@ if __name__ == '__main__':
         sys.stdout = sys.stderr = open(DATA/'background.log', 'a', buffering=1, encoding='utf-8')
     if args.restore:
         failures = []
-        for restore in [lambda:timer_system_cap(None),lambda:set_power(restore=True), lambda:set_gpu(restore=True)]:
+        for restore in [lambda:tweakout.close(),lambda:timer_system_cap(None),lambda:set_power(restore=True), lambda:set_gpu(restore=True)]:
             try: restore()
             except Exception as exc: failures.append(str(exc))
         if failures: raise RuntimeError('; '.join(failures))
@@ -415,6 +410,7 @@ if __name__ == '__main__':
     else:
         # Bind before tracking to prevent duplicate launches from double-counting.
         server = ThreadingHTTPServer(('0.0.0.0',8765),Handler)
+        tweakout.reconcile()
         metrics.start()
         fps.start()
         threading.Thread(target=track, daemon=True).start()
@@ -431,5 +427,5 @@ if __name__ == '__main__':
         try: server.serve_forever()
         except KeyboardInterrupt: stop.set()
         finally:
-            stop.set(); power_actions.cancel(); network_limit.stop(); fps.close()
+            stop.set(); tweakout.close(); power_actions.cancel(); network_limit.stop(); fps.close()
             limits.close(); server.server_close()

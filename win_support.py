@@ -54,3 +54,22 @@ def query(ptr,iid):
     out=C.c_void_p();guid=GUID.parse(iid)
     check(com(ptr,0,C.c_long,C.POINTER(GUID),C.POINTER(C.c_void_p))(ptr,C.byref(guid),C.byref(out)),'QueryInterface')
     return out
+
+def cpu_state():
+    """Read the active Windows power plan and AC/DC maximum processor states."""
+    api=C.WinDLL('powrprof');kernel=C.WinDLL('kernel32')
+    ptr=C.POINTER(GUID)()
+    if api.PowerGetActiveScheme(None,C.byref(ptr)):raise RuntimeError('Cannot read active power plan')
+    try:
+        scheme=str(uuid.UUID(bytes_le=bytes(ptr.contents)))
+        sub=GUID.parse('54533251-82be-4824-96c1-47b60b740d00')
+        setting=GUID.parse('bc5038f7-23e0-4960-96da-33abaf5935ec')
+        values=[]
+        for name in ('PowerReadACValueIndex','PowerReadDCValueIndex'):
+            value=W.DWORD()
+            if getattr(api,name)(None,ptr,C.byref(sub),C.byref(setting),C.byref(value)):
+                raise RuntimeError('Maximum processor state is unavailable')
+            values.append(value.value)
+        return scheme,values
+    finally:
+        kernel.LocalFree.argtypes=[C.c_void_p];kernel.LocalFree(ptr)

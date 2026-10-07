@@ -10,7 +10,7 @@ if ($Remove) {
     Get-NetFirewallRule -Name 'HomeControl-Private-8765' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     Get-NetFirewallRule -Name 'HomeControl-Tailscale-8765' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     Write-Host 'Startup disabled. Usage and saved original settings are preserved.'
-    Write-Host 'Pending device recovery tasks are preserved. Keep this folder in place until recovery finishes.'
+    Write-Host 'Pending device and Tweakout CPU recovery tasks are preserved. Keep this folder in place until recovery finishes.'
     exit
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

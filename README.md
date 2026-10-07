@@ -1,6 +1,6 @@
 # HomeControl
 
-A Windows background app with an iPhone dashboard on your home network. Python 3 is required; no third-party Python packages are needed.
+A Windows background app with an iPhone dashboard on your home network. Python 3 with Tcl/Tk is required for the optional screen effects; no third-party Python packages are needed.
 
 ## Install or update on the controlled laptop
 
@@ -49,6 +49,16 @@ Authenticated GET /api/network returns state; POST /api/network accepts `{ "mbps
 ## Laptop power
 
 Lock acts immediately. Restart and shutdown begin a ten-second countdown with a Cancel button. At the deadline HomeControl asks Windows to close applications normally using shutdown.exe with `/t 0` and without `/f`. The countdown is kept inside HomeControl because a nonzero Windows shutdown timeout implies forced closure. Unsaved applications can prevent or delay completion. Closing HomeControl cancels a pending countdown. Sleep and wake are not offered.
+
+## Tweakout mode
+
+The dashboard can start a simulated glitch on the selected laptop: a fullscreen corrupted-display effect with slow dark colour changes, fake diagnostic text and a bounded synthetic buzz. It does not restart the graphics driver. Audio uses the existing Windows volume. There is no Cancel button or Escape shortcut in the laptop effect; **Cancel Tweakout & restore CPU is only on the dashboard**.
+
+**Preview effects only** runs for 12 seconds without changing CPU settings or requesting shutdown. Full mode requires a separate confirmation naming the selected laptop. It sets the Windows maximum processor state to 1% for charger and battery, runs a 20-second countdown, then restores the previous CPU settings before requesting normal Windows shutdown with `/t 0` and no `/f`. This CPU setting is a performance request, not a guaranteed utilization/clock percentage. Unsaved applications can delay or prevent shutdown. Cancel remains available until the countdown dispatches shutdown; keep the dashboard connected to that laptop. The effect is clearly labelled as a simulation on screen.
+
+HomeControl journals the exact pre-sequence CPU values and verifies an independent elevated **HomeControl-TweakoutRecovery-…** task before applying the cap. Cancel, helper failure, a stalled helper, a delayed resume, normal app exit or a rejected shutdown restores those values. If the app crashes, the recovery task restores them after 60 seconds and retries every minute or at sign-in. Startup also reconciles outstanding records. Failed recovery retains its record and blocks another sequence; Cancel retries restoration. The signed-in account and laptop must be awake for the recovery task to run. Keep the application folder in place until recovery finishes. The mode never resumes automatically at startup.
+
+CPU/GPU changes, app-budget changes and other power actions are blocked during the sequence. Budget enforcement resumes afterward. Existing keys, usage history and device selections are preserved. Generated effects, audio and recovery records are excluded from source packages and GitHub. Authenticated endpoints: GET `/api/tweakout`, POST `/api/tweakout/start` with `{ "preview": true }` or `{ "confirmed": true }`, and POST `/api/tweakout/cancel` with `{}`. They support the existing selected-laptop relay.
 
 ## Selected USB and keyboard devices
 
