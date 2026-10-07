@@ -75,7 +75,7 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   const tweakCalls=[],tweakElements=new Map();
   const tweakGet=id=>{if(!tweakElements.has(id))tweakElements.set(id,{hidden:true,disabled:false,textContent:''});return tweakElements.get(id)};
   const tweakContext=vm.createContext({$:tweakGet,Date,live:{tweakout:{preview:false}},powerDeadline:null,tweakoutDeadline:null,
-    tweakoutActive:false,tweakoutBusy:false,pendingTweakoutTarget:null,selectedLaptop:'gaming',laptopList:[{id:'gaming',name:'Gaming laptop'}],
+    tweakoutActive:false,tweakoutBusy:false,lagBusy:false,pendingTweakoutTarget:null,selectedLaptop:'gaming',laptopList:[{id:'gaming',name:'Gaming laptop'}],
     refreshMetrics:async()=>{},feature:async(url,body)=>{tweakCalls.push({url,body});return {active:url.endsWith('/start'),seconds:body.preview?12:20,state:'cancelled'}}});
   vm.runInContext(page.slice(page.indexOf('function tweakoutCountdown('),page.indexOf('let networkDirty=')),tweakContext);
   tweakGet('tweakoutStart').onclick();assert.equal(tweakCalls.length,0);assert.equal(tweakGet('tweakoutConfirm').hidden,false);
@@ -90,6 +90,13 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   await tweakGet('tweakoutPreview').onclick();assert.equal(tweakCalls[2].body.preview,true);assert.equal(tweakCalls[2].body.confirmed,false);
   vm.runInContext('renderTweakout({active:false,recoveryPending:true,state:"recovery_needed"})',tweakContext);
   assert.equal(tweakGet('tweakoutCancel').hidden,false);assert.equal(tweakGet('tweakoutStart').disabled,true);
+  tweakGet('lagFloor').value='15';tweakGet('lagHold').value='20';await tweakGet('lagStart').onclick();
+  assert.equal(tweakCalls[3].url,'/api/lag/start');assert.equal(tweakCalls[3].body.floor,15);assert.equal(tweakCalls[3].body.hold,20);
+  await tweakGet('lagCancel').onclick();assert.equal(tweakCalls[4].url,'/api/lag/cancel');
+  vm.runInContext('live={tweakout:{active:true}};renderLag({active:false,state:"idle",recoveryPending:false})',tweakContext);
+  assert.equal(tweakGet('lagStart').disabled,true);
+  vm.runInContext('live={gradualLag:{active:true}};renderTweakout({active:false,state:"idle",recoveryPending:true})',tweakContext);
+  assert.equal(tweakGet('tweakoutStart').disabled,true);assert.equal(tweakGet('tweakoutCancel').hidden,true);
   const appCalls=[],appElements=new Map();
   const appGet=id=>{if(!appElements.has(id))appElements.set(id,{value:'',textContent:'',disabled:false});return appElements.get(id)};
   const appContext=vm.createContext({$:appGet,setInterval:()=>{},key:'test-key',pollingAllowed:()=>true,
@@ -104,7 +111,7 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   appGet('launchApp').value='unknown';await appGet('launchButton').onclick();assert.equal(appCalls.length,1);
   await appGet('launchRefresh').onclick();assert.equal(appCalls[1].url,'/api/apps/refresh');assert.equal(appGet('launchButton').disabled,true);
   const switchElements=new Map();const switchGet=id=>{if(!switchElements.has(id))switchElements.set(id,{value:'old command',textContent:'old output',replaceChildren(){this.value=''}});return switchElements.get(id)};
-  const switchContext=vm.createContext({$:switchGet,busy:false,terminalBusy:false,devicesBusy:false,networkBusy:false,tweakoutBusy:false,appLaunchBusy:true,laptopsLoading:false,
+  const switchContext=vm.createContext({$:switchGet,busy:false,terminalBusy:false,devicesBusy:false,networkBusy:false,tweakoutBusy:false,lagBusy:false,appLaunchBusy:true,laptopsLoading:false,
     selectedLaptop:'local',launchCatalog:{apps:[{id:'old'}]},laptopList:[],deviceDirty:true,networkDirty:true,deviceData:{},status:{},live:{},
     powerDeadline:10,powerAction:'restart',pendingTweakoutTarget:'local',tweakoutDeadline:20,tweakoutActive:true,
     refresh:async()=>{switchContext.status={}},renderLaptops:()=>{}});
@@ -114,6 +121,7 @@ function fixture({local=storage(),session=storage(),standalone=false,fragment=''
   assert.equal(switchContext.selectedLaptop,'desktop');assert.equal(switchContext.launchCatalog,null);
   assert.equal(switchGet('command').value,'');assert.equal(switchGet('launchSearch').value,'');assert.equal(switchGet('launchButton').disabled,true);
   assert.equal(switchContext.pendingTweakoutTarget,null);
+  assert.equal(switchGet('lagCancel').hidden,true);assert.equal(switchGet('lagStart').disabled,true);
   // Parse the complete dashboard script as well as the isolated UI fixtures above.
   new vm.Script(page.split('<script>')[1].split('</script>')[0]);
   console.log('Web app checks passed: opt-in storage, relaunch, disconnect, invalid key, standalone, blocked storage, stale requests.');
