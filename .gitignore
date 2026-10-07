@@ -12,3 +12,17 @@ original-power.json
 original-gpu.json
 connection*.txt
 *.zip
+app-limits.json
+app-limits.tmp
+terminal-enabled.txt
+timer-original-power.json
+work/
+fps-settings.json
+fps-settings.tmp
+gpu-load-*.json
+gpu-load-*.tmp
+device-selections.json
+device-selections.tmp
+device-recovery.json
+device-recovery.tmp
+dist/

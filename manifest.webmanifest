@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "HomeControl",
+  "short_name": "HomeControl",
+  "description": "Control and monitor your Windows laptop on your home network.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101724",
+  "theme_color": "#101724",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
